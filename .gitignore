@@ -1,0 +1,57 @@
+# Flutter/Dart/Pub
+.dart_tool/
+.firebase/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# iOS
+ios/Flutter/.last_build_id
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# macOS
+macos/Flutter/ephemeral/
+
+# Linux
+linux/flutter/ephemeral/
+
+# Windows
+windows/flutter/ephemeral/
+
+# Web
+build/web/
+
+# Firebase
+.firebase/
+.firebaserc
+
+# Logs
+*.log
+analyze*.txt
+flutter_*.log
+
+# Flutter tool cache (browser profile, etc.)
+.dart_tool/chrome-device/
+
+# Misc
+*.lock
+*.swp
+*.DS_Store
+Thumbs.db
