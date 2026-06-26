@@ -395,6 +395,14 @@ class DataTellerNotifier extends ChangeNotifier {
     if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
       return 'No SBB hanya boleh berisi angka';
     }
+    // Cek duplikat: no SBB tidak boleh sama dengan teller lain
+    final isDuplicate = _list.any((t) {
+      if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
+      return t.noSbb == value;
+    });
+    if (isDuplicate) {
+      return 'No SBB sudah digunakan oleh teller lain';
+    }
     return null;
   }
 
@@ -867,10 +875,11 @@ class DataTellerNotifier extends ChangeNotifier {
       final result = await TellerRepository.getLimitTeller(userId: userId, bprId: bprId);
       if (result['value'] == 1) {
         final limits = result['limits'] as List<dynamic>;
+        final _rupiahFmt = NumberFormat('#,###', 'id_ID');
         for (final l in limits) {
           final tcode = l['tcode']?.toString() ?? '';
           final nominal = (l['limit_nominal'] as num?)?.toDouble() ?? 0.0;
-          final formatted = nominal == 0 ? '' : nominal.toStringAsFixed(0);
+          final formatted = nominal == 0 ? '' : _rupiahFmt.format(nominal.toInt());
           if (tcode == '1000') limitSetorTunaiCtrl.text = formatted;
           if (tcode == '1100') limitTarikTunaiCtrl.text = formatted;
           if (tcode == '2300') limitPindahBukuCtrl.text = formatted;
@@ -1619,6 +1628,18 @@ class DataTellerNotifier extends ChangeNotifier {
         );
         return false;
       }
+
+      // Cek duplikat no SBB
+      final isDuplicate = _list.any((t) {
+        if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
+        return t.noSbb == noSbb;
+      });
+      if (isDuplicate) {
+        _showErrorDialog(
+          'No SBB "$noSbb" sudah digunakan oleh teller lain.\n\nSetiap teller harus memiliki No SBB yang unik.',
+        );
+        return false;
+      }
     }
 
     if (drawerMode == 'tambah') {
@@ -1721,6 +1742,11 @@ class DataTellerNotifier extends ChangeNotifier {
     if (!RegExp(r'^[0-9]+$').hasMatch(text)) {
       return 'No SBB hanya boleh berisi angka';
     }
+    final isDuplicate = _list.any((t) {
+      if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
+      return t.noSbb == text;
+    });
+    if (isDuplicate) return 'No SBB sudah digunakan oleh teller lain';
     return null;
   }
 

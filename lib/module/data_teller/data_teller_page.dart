@@ -567,7 +567,7 @@ class DataTellerPage extends StatelessWidget {
                   TextFormField(
                     controller: notifier.limitSetorTunaiCtrl,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [_CurrencyInputFormatter()],
                     decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
                         fillColor: Colors.white).copyWith(
                       prefixText: 'Rp ',
@@ -579,7 +579,7 @@ class DataTellerPage extends StatelessWidget {
                   TextFormField(
                     controller: notifier.limitTarikTunaiCtrl,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [_CurrencyInputFormatter()],
                     decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
                         fillColor: Colors.white).copyWith(
                       prefixText: 'Rp ',
@@ -591,7 +591,7 @@ class DataTellerPage extends StatelessWidget {
                   TextFormField(
                     controller: notifier.limitPindahBukuCtrl,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [_CurrencyInputFormatter()],
                     decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
                         fillColor: Colors.white).copyWith(
                       prefixText: 'Rp ',
@@ -957,6 +957,26 @@ class DataTellerPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: colorPrimary, width: 1.5),
       ),
+    );
+  }
+}
+class _CurrencyInputFormatter extends TextInputFormatter {
+  final _formatter = NumberFormat('#,###', 'id_ID');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+    final number = int.tryParse(digitsOnly) ?? 0;
+    final formatted = _formatter.format(number);
+    return newValue.copyWith(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
