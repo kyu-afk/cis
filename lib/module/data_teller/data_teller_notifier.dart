@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/index.dart';
 import '../../pref/pref.dart';
+import '../setup/limit_transaksi/limit_transaksi_notifier.dart' show CurrencyInputFormatter;
 import '../../repository/teller_repository.dart';
 import '../../repository/users_access_repository.dart';
 import '../../network/network.dart';
@@ -167,10 +168,13 @@ class DataTellerNotifier extends ChangeNotifier {
   final tglCtrl = TextEditingController();
   final batchCtrl = TextEditingController();
 
-  // Limit transaksi controllers
-  final limitSetorTunaiCtrl = TextEditingController(); // tcode 1000
-  final limitTarikTunaiCtrl = TextEditingController(); // tcode 1100
-  final limitPindahBukuCtrl = TextEditingController(); // tcode 2300
+  // Limit transaksi controllers (min & max per tcode)
+  final limitMinSetorTunaiCtrl  = TextEditingController(); // tcode 1000 min
+  final limitSetorTunaiCtrl     = TextEditingController(); // tcode 1000 max
+  final limitMinTarikTunaiCtrl  = TextEditingController(); // tcode 1100 min
+  final limitTarikTunaiCtrl     = TextEditingController(); // tcode 1100 max
+  final limitMinPindahBukuCtrl  = TextEditingController(); // tcode 2300 min
+  final limitPindahBukuCtrl     = TextEditingController(); // tcode 2300 max
 
   // Keys
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -808,8 +812,11 @@ class DataTellerNotifier extends ChangeNotifier {
     tglCtrl.clear();
     alasanCtrl.clear();
     batchCtrl.clear();
+    limitMinSetorTunaiCtrl.clear();
     limitSetorTunaiCtrl.clear();
+    limitMinTarikTunaiCtrl.clear();
     limitTarikTunaiCtrl.clear();
+    limitMinPindahBukuCtrl.clear();
     limitPindahBukuCtrl.clear();
     _isInternalChange = false;
     
@@ -835,8 +842,11 @@ class DataTellerNotifier extends ChangeNotifier {
     passwordCtrl.clear();
     alasanCtrl.clear();
     isChangePassword = false;
+    limitMinSetorTunaiCtrl.clear();
     limitSetorTunaiCtrl.clear();
+    limitMinTarikTunaiCtrl.clear();
     limitTarikTunaiCtrl.clear();
+    limitMinPindahBukuCtrl.clear();
     limitPindahBukuCtrl.clear();
 
     _originalNoSbb = teller.noSbb ?? '';
@@ -858,6 +868,7 @@ class DataTellerNotifier extends ChangeNotifier {
   }
 
   double _parseLimitNominal(String text) {
+    // Support both "1.000.000" (currency format) and plain "1000000"
     final clean = text.trim().replaceAll('.', '').replaceAll(',', '');
     return double.tryParse(clean) ?? 0.0;
   }
@@ -866,8 +877,11 @@ class DataTellerNotifier extends ChangeNotifier {
     try {
       await TellerRepository.saveLimitTeller(
         userId: userId,
+        minSetorTunai:  _parseLimitNominal(limitMinSetorTunaiCtrl.text),
         limitSetorTunai: _parseLimitNominal(limitSetorTunaiCtrl.text),
+        minTarikTunai:  _parseLimitNominal(limitMinTarikTunaiCtrl.text),
         limitTarikTunai: _parseLimitNominal(limitTarikTunaiCtrl.text),
+        minPindahBuku:  _parseLimitNominal(limitMinPindahBukuCtrl.text),
         limitPindahBuku: _parseLimitNominal(limitPindahBukuCtrl.text),
         bprId: bprId,
       );
@@ -1014,10 +1028,17 @@ class DataTellerNotifier extends ChangeNotifier {
     final limitSetor = limitSetorTunaiCtrl.text.trim();
     final limitTarik = limitTarikTunaiCtrl.text.trim();
     final limitPindah = limitPindahBukuCtrl.text.trim();
-    if (limitSetor.isNotEmpty || limitTarik.isNotEmpty || limitPindah.isNotEmpty) {
+    final minSetor = limitMinSetorTunaiCtrl.text.trim();
+    final minTarik = limitMinTarikTunaiCtrl.text.trim();
+    final minPindah = limitMinPindahBukuCtrl.text.trim();
+    if (limitSetor.isNotEmpty || limitTarik.isNotEmpty || limitPindah.isNotEmpty ||
+        minSetor.isNotEmpty || minTarik.isNotEmpty || minPindah.isNotEmpty) {
+      changes['Min Setor Tunai']   = {'old': '-', 'new': minSetor.isEmpty   ? '0' : minSetor};
       changes['Limit Setor Tunai'] = {'old': '-', 'new': limitSetor.isEmpty ? '0' : limitSetor};
+      changes['Min Tarik Tunai']   = {'old': '-', 'new': minTarik.isEmpty   ? '0' : minTarik};
       changes['Limit Tarik Tunai'] = {'old': '-', 'new': limitTarik.isEmpty ? '0' : limitTarik};
-      changes['Limit Pindah Buku'] = {'old': '-', 'new': limitPindah.isEmpty ? '0' : limitPindah};
+      changes['Min Pindah Buku']   = {'old': '-', 'new': minPindah.isEmpty  ? '0' : minPindah};
+      changes['Limit Pindah Buku'] = {'old': '-', 'new': limitPindah.isEmpty? '0' : limitPindah};
     }
 
     return changes;
@@ -1763,8 +1784,11 @@ class DataTellerNotifier extends ChangeNotifier {
     tglCtrl.dispose();
     alasanCtrl.dispose();
     batchCtrl.dispose();
+    limitMinSetorTunaiCtrl.dispose();
     limitSetorTunaiCtrl.dispose();
+    limitMinTarikTunaiCtrl.dispose();
     limitTarikTunaiCtrl.dispose();
+    limitMinPindahBukuCtrl.dispose();
     limitPindahBukuCtrl.dispose();
     searchCtrl.dispose();
     super.dispose();

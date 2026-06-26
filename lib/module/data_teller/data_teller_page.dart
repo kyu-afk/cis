@@ -6,6 +6,7 @@ import '../../utils/widgets/app_data_grid.dart';
 import 'data_teller_notifier.dart';
 import 'data_teller_stsrec.dart';
 import 'package:flutter/services.dart';
+import '../setup/limit_transaksi/limit_transaksi_notifier.dart' show CurrencyInputFormatter;
 
 class DataTellerPage extends StatelessWidget {
   const DataTellerPage({super.key});
@@ -937,6 +938,54 @@ class DataTellerPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.black87)),
+    );
+  }
+
+  Widget _limitTcodeRow({
+    required String label,
+    required TextEditingController minCtrl,
+    required TextEditingController maxCtrl,
+  }) {
+    final rpStyle = const TextStyle(fontSize: 13, color: Colors.black54);
+    final formatter = [CurrencyInputFormatter()];
+    final dec = _inputDecoration('0', fillColor: Colors.white).copyWith(
+      prefixText: 'Rp ',
+      prefixStyle: rpStyle,
+      isDense: true,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorPrimary)),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Min', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: minCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: formatter,
+                decoration: dec.copyWith(hintText: '0 = tanpa min'),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Max (pending jika lebih)', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: maxCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: formatter,
+                decoration: dec.copyWith(hintText: '0 = tanpa max'),
+              ),
+            ]),
+          ),
+        ]),
+      ],
     );
   }
 

@@ -519,8 +519,11 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
 
   static Future<Map<String, dynamic>> saveLimitTeller({
     required String userId,
+    required double minSetorTunai,
     required double limitSetorTunai,
+    required double minTarikTunai,
     required double limitTarikTunai,
+    required double minPindahBuku,
     required double limitPindahBuku,
     String? bprId,
   }) async {
@@ -534,9 +537,9 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'userlogin': session.usersId,
         'term':      'WEB',
         'limits': [
-          {'tcode': '1000', 'limit_nominal': limitSetorTunai},
-          {'tcode': '1100', 'limit_nominal': limitTarikTunai},
-          {'tcode': '2300', 'limit_nominal': limitPindahBuku},
+          {'tcode': '1000', 'min_nominal': minSetorTunai,  'limit_nominal': limitSetorTunai},
+          {'tcode': '1100', 'min_nominal': minTarikTunai,  'limit_nominal': limitTarikTunai},
+          {'tcode': '2300', 'min_nominal': minPindahBuku,  'limit_nominal': limitPindahBuku},
         ],
       };
 
