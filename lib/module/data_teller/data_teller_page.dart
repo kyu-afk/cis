@@ -552,80 +552,55 @@ class DataTellerPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                 ],
-                
-                // Fasilitas (hanya form mode)
+
+                // Limit Transaksi (hanya form mode)
                 if (isFormMode) ...[
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        const Text('Akses Fasilitas', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: colorPrimary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: Text('${notifier.selectedFasilitas.length} dipilih',
-                              style: const TextStyle(fontSize: 11, color: colorPrimary, fontWeight: FontWeight.w600)),
-                        ),
-                      ]),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: notifier.manualErrors['fasilitas'] != null ? Colors.red : Colors.grey.shade300,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ListView.builder(
-                          itemCount: notifier.listFasilitas.length,
-                          shrinkWrap: true,
-                          physics: const ClampingScrollPhysics(),
-                          itemBuilder: (_, i) {
-                            final f = notifier.listFasilitas[i];
-                            final selected = notifier.selectedFasilitas.contains(f);
-                            return InkWell(
-                              onTap: () => notifier.toggleFasilitas(f),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: selected ? colorPrimary.withOpacity(0.05) : null,
-                                  border: i > 0 ? const Border(top: BorderSide(color: Color(0xffEEEEEE))) : null,
-                                ),
-                                child: Row(children: [
-                                  Checkbox(
-                                    activeColor: colorPrimary,
-                                    value: selected,
-                                    onChanged: (_) => notifier.toggleFasilitas(f),
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(f.menu, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                                        if (f.submenu.isNotEmpty)
-                                          Text(f.submenu, style: const TextStyle(fontSize: 11, color: Colors.black45)),
-                                      ],
-                                    ),
-                                  ),
-                                ]),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      if (notifier.manualErrors['fasilitas'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            notifier.manualErrors['fasilitas']!,
-                            style: const TextStyle(fontSize: 12, color: Colors.red),
-                          ),
-                        ),
-                    ],
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: Row(children: [
+                      Icon(Icons.account_balance_wallet_outlined, size: 16, color: colorPrimary),
+                      SizedBox(width: 6),
+                      Text('Limit Transaksi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorPrimary)),
+                    ]),
                   ),
+                  _fieldLabel('Limit Setor Tunai (Tcode 1000)'),
+                  TextFormField(
+                    controller: notifier.limitSetorTunaiCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
+                        fillColor: Colors.white).copyWith(
+                      prefixText: 'Rp ',
+                      prefixStyle: const TextStyle(fontSize: 13, color: Colors.black54),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _fieldLabel('Limit Tarik Tunai (Tcode 1100)'),
+                  TextFormField(
+                    controller: notifier.limitTarikTunaiCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
+                        fillColor: Colors.white).copyWith(
+                      prefixText: 'Rp ',
+                      prefixStyle: const TextStyle(fontSize: 13, color: Colors.black54),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _fieldLabel('Limit Pindah Buku (Tcode 2300)'),
+                  TextFormField(
+                    controller: notifier.limitPindahBukuCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: _inputDecoration('Nominal limit (0 = tidak ada limit)',
+                        fillColor: Colors.white).copyWith(
+                      prefixText: 'Rp ',
+                      prefixStyle: const TextStyle(fontSize: 13, color: Colors.black54),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
+
               ],
             ),
           ),
@@ -749,9 +724,6 @@ class DataTellerPage extends StatelessWidget {
         break;
       case 'batch':
         targetOffset = 800;
-        break;
-      case 'fasilitas':
-        targetOffset = 900;
         break;
       default:
         targetOffset = 0;

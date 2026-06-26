@@ -479,6 +479,87 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     }
   }
 
+  // ==================== LIMIT TRANSAKSI ====================
+  static Future<Map<String, dynamic>> getLimitTeller({
+    required String userId,
+    String? bprId,
+  }) async {
+    try {
+      final dio     = await _dioWithToken();
+      final session = await Pref().getUsers();
+
+      final body = {
+        'userid': userId,
+        'bpr_id': bprId ?? session.bprId,
+      };
+
+      if (kDebugMode) {
+        print('LIMIT INQUIRY TELLER URL : ${NetworkURL.limitInquiryTeller()}');
+        print('LIMIT INQUIRY TELLER BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.limitInquiryTeller(), data: body);
+      final decoded  = _safeDecode(response.data);
+
+      if (kDebugMode) print('LIMIT INQUIRY TELLER RESP: $decoded');
+
+      final rawData = decoded['data'];
+      final limits  = (rawData is Map ? rawData['limits'] : null) ?? [];
+
+      return {
+        'value':   _mapCode(decoded),
+        'message': _mapMessage(decoded),
+        'limits':  limits is List ? limits : [],
+      };
+    } catch (e) {
+      if (kDebugMode) print('ERROR LIMIT INQUIRY TELLER: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e), 'limits': []};
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveLimitTeller({
+    required String userId,
+    required double limitSetorTunai,
+    required double limitTarikTunai,
+    required double limitPindahBuku,
+    String? bprId,
+  }) async {
+    try {
+      final dio     = await _dioWithToken();
+      final session = await Pref().getUsers();
+
+      final body = {
+        'userid':    userId,
+        'bpr_id':    bprId ?? session.bprId,
+        'userlogin': session.usersId,
+        'term':      'WEB',
+        'limits': [
+          {'tcode': '1000', 'limit_nominal': limitSetorTunai},
+          {'tcode': '1100', 'limit_nominal': limitTarikTunai},
+          {'tcode': '2300', 'limit_nominal': limitPindahBuku},
+        ],
+      };
+
+      if (kDebugMode) {
+        print('LIMIT SAVE TELLER URL : ${NetworkURL.limitSaveTeller()}');
+        print('LIMIT SAVE TELLER BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.limitSaveTeller(), data: body);
+      final decoded  = _safeDecode(response.data);
+
+      if (kDebugMode) print('LIMIT SAVE TELLER RESP: $decoded');
+
+      return {
+        'value':   _mapCode(decoded),
+        'message': _mapMessage(decoded),
+      };
+    } catch (e) {
+      if (kDebugMode) print('ERROR LIMIT SAVE TELLER: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e)};
+    }
+  }
+
   // ==================== RESET PASSWORD ====================
   static Future<Map<String, dynamic>> resetPasswordTeller({
     required String userId,

@@ -167,6 +167,11 @@ class DataTellerNotifier extends ChangeNotifier {
   final tglCtrl = TextEditingController();
   final batchCtrl = TextEditingController();
 
+  // Limit transaksi controllers
+  final limitSetorTunaiCtrl = TextEditingController(); // tcode 1000
+  final limitTarikTunaiCtrl = TextEditingController(); // tcode 1100
+  final limitPindahBukuCtrl = TextEditingController(); // tcode 2300
+
   // Keys
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final formKey = GlobalKey<FormState>();
@@ -335,15 +340,6 @@ class DataTellerNotifier extends ChangeNotifier {
         errors['batch'] = batchError;
         allValid = false;
         if (firstErrorKey == null) firstErrorKey = 'batch';
-      }
-    }
-    
-    // Fasilitas (tambah dan edit)
-    if (isTambah || isEdit) {
-      if (_selectedFasilitas.isEmpty) {
-        errors['fasilitas'] = 'Pilih minimal 1 fasilitas';
-        allValid = false;
-        if (firstErrorKey == null) firstErrorKey = 'fasilitas';
       }
     }
     
@@ -798,6 +794,9 @@ class DataTellerNotifier extends ChangeNotifier {
     tglCtrl.clear();
     alasanCtrl.clear();
     batchCtrl.clear();
+    limitSetorTunaiCtrl.clear();
+    limitTarikTunaiCtrl.clear();
+    limitPindahBukuCtrl.clear();
     _isInternalChange = false;
     
     _originalNoSbb = '';
@@ -812,7 +811,7 @@ class DataTellerNotifier extends ChangeNotifier {
   void isiForm(DataTellerModel teller) {
     _manualErrors.clear();
     _isInternalChange = true;
-    
+
     userIdCtrl.text = teller.userId ?? '';
     namaTellerCtrl.text = teller.namaTeller ?? '';
     tglCtrl.text = teller.tglKadaluarsa ?? '';
@@ -822,7 +821,10 @@ class DataTellerNotifier extends ChangeNotifier {
     passwordCtrl.clear();
     alasanCtrl.clear();
     isChangePassword = false;
-    
+    limitSetorTunaiCtrl.clear();
+    limitTarikTunaiCtrl.clear();
+    limitPindahBukuCtrl.clear();
+
     _originalNoSbb = teller.noSbb ?? '';
     _originalNamaSbb = teller.namasbb ?? '';
 
@@ -831,9 +833,51 @@ class DataTellerNotifier extends ChangeNotifier {
       orElse: () => _listKantor.isNotEmpty ? _listKantor.first : KantorDummy('', '', ''),
     );
     _selectedFasilitas.clear();
-    
+
     _isInternalChange = false;
     notifyListeners();
+
+    // Load existing limits from server
+    if (teller.userId != null && teller.userId!.isNotEmpty) {
+      _loadLimitTeller(teller.userId!);
+    }
+  }
+
+  double _parseLimitNominal(String text) {
+    final clean = text.trim().replaceAll('.', '').replaceAll(',', '');
+    return double.tryParse(clean) ?? 0.0;
+  }
+
+  Future<void> _saveLimitTeller(String userId) async {
+    try {
+      await TellerRepository.saveLimitTeller(
+        userId: userId,
+        limitSetorTunai: _parseLimitNominal(limitSetorTunaiCtrl.text),
+        limitTarikTunai: _parseLimitNominal(limitTarikTunaiCtrl.text),
+        limitPindahBuku: _parseLimitNominal(limitPindahBukuCtrl.text),
+        bprId: bprId,
+      );
+    } catch (e) {
+      if (kDebugMode) print('ERROR SAVE LIMIT TELLER: $e');
+    }
+  }
+
+  Future<void> _loadLimitTeller(String userId) async {
+    try {
+      final result = await TellerRepository.getLimitTeller(userId: userId, bprId: bprId);
+      if (result['value'] == 1) {
+        final limits = result['limits'] as List<dynamic>;
+        for (final l in limits) {
+          final tcode = l['tcode']?.toString() ?? '';
+          final nominal = (l['limit_nominal'] as num?)?.toDouble() ?? 0.0;
+          final formatted = nominal == 0 ? '' : nominal.toStringAsFixed(0);
+          if (tcode == '1000') limitSetorTunaiCtrl.text = formatted;
+          if (tcode == '1100') limitTarikTunaiCtrl.text = formatted;
+          if (tcode == '2300') limitPindahBukuCtrl.text = formatted;
+        }
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   // ==================== DRAWER ACTIONS ====================
@@ -950,7 +994,17 @@ class DataTellerNotifier extends ChangeNotifier {
         'new': '******** (diubah)',
       };
     }
-    
+
+    // Limit transaksi selalu ditampilkan di konfirmasi jika diisi
+    final limitSetor = limitSetorTunaiCtrl.text.trim();
+    final limitTarik = limitTarikTunaiCtrl.text.trim();
+    final limitPindah = limitPindahBukuCtrl.text.trim();
+    if (limitSetor.isNotEmpty || limitTarik.isNotEmpty || limitPindah.isNotEmpty) {
+      changes['Limit Setor Tunai'] = {'old': '-', 'new': limitSetor.isEmpty ? '0' : limitSetor};
+      changes['Limit Tarik Tunai'] = {'old': '-', 'new': limitTarik.isEmpty ? '0' : limitTarik};
+      changes['Limit Pindah Buku'] = {'old': '-', 'new': limitPindah.isEmpty ? '0' : limitPindah};
+    }
+
     return changes;
   }
 
@@ -1454,12 +1508,15 @@ class DataTellerNotifier extends ChangeNotifier {
           kdKantor: selectedKantor?.kdKantor ?? '',
           sbbTeller: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
-          tanggalExpired: tglCtrl.text.trim().length > 10 
-          ? tglCtrl.text.trim().substring(0, 10) 
-          : tglCtrl.text.trim(),
+          tanggalExpired: tglCtrl.text.trim().length > 10
+              ? tglCtrl.text.trim().substring(0, 10)
+              : tglCtrl.text.trim(),
           batch: batchCtrl.text.trim(),
           bprId: bprId,
         );
+        if (result['value'] == 1) {
+          await _saveLimitTeller(userIdCtrl.text.trim().toUpperCase());
+        }
         break;
       case 'edit':
         result = await TellerRepository.updateTeller(
@@ -1470,13 +1527,16 @@ class DataTellerNotifier extends ChangeNotifier {
           kdKantor: selectedKantor?.kdKantor ?? '',
           sbbTeller: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
-          tanggalExpired: tglCtrl.text.trim().length > 10 
-          ? tglCtrl.text.trim().substring(0, 10) 
-          : tglCtrl.text.trim(),
+          tanggalExpired: tglCtrl.text.trim().length > 10
+              ? tglCtrl.text.trim().substring(0, 10)
+              : tglCtrl.text.trim(),
           password: isChangePassword ? passwordCtrl.text.trim() : null,
           batch: batchCtrl.text.trim(),
           bprId: bprId,
         );
+        if (result['value'] == 1 && selectedTeller?.userId != null) {
+          await _saveLimitTeller(selectedTeller!.userId!);
+        }
         break;
       case 'hapus':
         result = await TellerRepository.deleteTeller(
@@ -1688,6 +1748,9 @@ class DataTellerNotifier extends ChangeNotifier {
     tglCtrl.dispose();
     alasanCtrl.dispose();
     batchCtrl.dispose();
+    limitSetorTunaiCtrl.dispose();
+    limitTarikTunaiCtrl.dispose();
+    limitPindahBukuCtrl.dispose();
     searchCtrl.dispose();
     super.dispose();
   }

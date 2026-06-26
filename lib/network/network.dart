@@ -78,6 +78,8 @@ class NetworkURL {
   static String resetPasswordTeller()   => "$url_go3/cis/teller/reset-password";
   static String bukaTransaksiTeller()   => "$url_go3/cis/teller/buka-transaksi";
   static String tutupTransaksiTeller()  => "$url_go3/cis/teller/tutup-transaksi";
+  static String limitInquiryTeller()    => "$url_go3/cis/teller/limit-inquiry";
+  static String limitSaveTeller()       => "$url_go3/cis/teller/limit-save";
  
   // ---------- Pengisian Modal ----------
   static String inquiryPengisianModal()  => "$url_go3/cis/pengisian-modal/inquiry";
