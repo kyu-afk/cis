@@ -395,7 +395,6 @@ class DataTellerNotifier extends ChangeNotifier {
     if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
       return 'No SBB hanya boleh berisi angka';
     }
-    // Cek duplikat: no SBB tidak boleh sama dengan teller lain
     final isDuplicate = _list.any((t) {
       if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
       return t.noSbb == value;
@@ -423,6 +422,13 @@ class DataTellerNotifier extends ChangeNotifier {
   String? _validateBatchManual(String value) {
     if (value.isEmpty) {
       return 'Batch wajib diisi';
+    }
+    final isDuplicate = _list.any((t) {
+      if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
+      return t.batch == value;
+    });
+    if (isDuplicate) {
+      return 'Batch sudah digunakan oleh teller lain';
     }
     return null;
   }
@@ -1628,18 +1634,6 @@ class DataTellerNotifier extends ChangeNotifier {
         );
         return false;
       }
-
-      // Cek duplikat no SBB
-      final isDuplicate = _list.any((t) {
-        if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
-        return t.noSbb == noSbb;
-      });
-      if (isDuplicate) {
-        _showErrorDialog(
-          'No SBB "$noSbb" sudah digunakan oleh teller lain.\n\nSetiap teller harus memiliki No SBB yang unik.',
-        );
-        return false;
-      }
     }
 
     if (drawerMode == 'tambah') {
@@ -1742,11 +1736,6 @@ class DataTellerNotifier extends ChangeNotifier {
     if (!RegExp(r'^[0-9]+$').hasMatch(text)) {
       return 'No SBB hanya boleh berisi angka';
     }
-    final isDuplicate = _list.any((t) {
-      if (drawerMode == 'edit' && t.userId == selectedTeller?.userId) return false;
-      return t.noSbb == text;
-    });
-    if (isDuplicate) return 'No SBB sudah digunakan oleh teller lain';
     return null;
   }
 

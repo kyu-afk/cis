@@ -68,11 +68,22 @@ class UserLevelHelper {
     return key == 'KANTOR' || key == 'USER ACCESS';
   }
 
-  /// Super admin bypass semua aturan fasilitas (selalu true).
+  /// Apakah menu tertentu boleh diakses oleh super admin (lvl 2)?
+  /// Super admin hanya boleh akses: Kantor, User Access, Setup, dan Laporan.
+  static bool superAdminCanAccessMenu(String menu) {
+    final key = menu.trim().toUpperCase();
+    return key == 'KANTOR' ||
+        key == 'USER ACCESS' ||
+        key == 'SETUP' ||
+        key == 'LAPORAN';
+  }
+
+  /// Super admin TIDAK lagi bypass semua fasilitas —
+  /// dibatasi hanya ke menu Kantor, User Access, Setup, dan Laporan.
   /// System hanya boleh menu Kantor dan User Access.
   /// User biasa tunduk pada listFasilitas.
   static bool bypassFasilitas(UsersModel? users) =>
-      isSuperAdmin(users);
+      false; // super admin tidak lagi full-bypass
 
   // ─── Kode kantor filter untuk list data ──────────────────────────────────
 

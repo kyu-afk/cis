@@ -80,7 +80,7 @@ class MenuNotifier extends ChangeNotifier {
         }
         if (isMasterAdmin) {
           print("[MenuNotifier] user level: ${UserLevelHelper.label(users)}");
-          if (isSuperAdmin) print("✅ SUPER ADMIN (lvl2) - akses penuh");
+          if (isSuperAdmin) print("✅ SUPER ADMIN (lvl2) - akses terbatas: Kantor, User Access, Setup, Laporan");
           if (isSystemUser) print("✅ SYSTEM (lvl3) - hanya Kantor & User Access");
         }
       }
@@ -142,11 +142,11 @@ class MenuNotifier extends ChangeNotifier {
 
   /// Cek akses berdasarkan menu + submenu (case-insensitive).
   ///
-  /// Super admin (lvl2) selalu true.
+  /// Super admin (lvl2) hanya boleh: Kantor, User Access, Setup, Laporan.
   /// System (lvl3) hanya true untuk Kantor dan User Access.
   /// User biasa (lvl1) cek listFasilitas.
   bool hasAccess(String menu, {String? submenu}) {
-    if (isSuperAdmin) return true;
+    if (isSuperAdmin) return UserLevelHelper.superAdminCanAccessMenu(menu);
     if (isSystemUser) return UserLevelHelper.systemCanAccessMenu(menu);
     if (listFasilitas.isEmpty) return false;
 
@@ -162,7 +162,7 @@ class MenuNotifier extends ChangeNotifier {
 
   /// Tampilkan grup ExpansionTile jika ada minimal satu submenu yang boleh.
   bool hasAnyInMenu(String menu, List<String> submenus) {
-    if (isSuperAdmin) return true;
+    if (isSuperAdmin) return UserLevelHelper.superAdminCanAccessMenu(menu);
     if (isSystemUser) return UserLevelHelper.systemCanAccessMenu(menu);
     return submenus.any((sub) => hasAccess(menu, submenu: sub));
   }
