@@ -536,12 +536,6 @@ class DataPetugasPage extends StatelessWidget {
                 // Akses / Limit Transaksi (hanya tambah & edit)
                 if (isFormMode) ...[
                   _sectionHeader('Akses / Limit Transaksi'),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Akses & limit per-tcode di bawah ini tersimpan langsung ke tabel '
-                    'cis_limit_petugas — tidak lewat middleware lama.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                  ),
                   const SizedBox(height: 12),
                   if (notifier.manualErrors['akses'] != null)
                     Padding(

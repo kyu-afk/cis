@@ -356,6 +356,15 @@ class DataPetugasNotifier extends ChangeNotifier {
     return (limitData: limitData, aksesData: aksesData);
   }
 
+  /// Cek apakah item hasil inquiry setup-transaksi benar-benar punya konfigurasi
+  /// (jenis debit/kredit terisi), bukan cuma row kosong/null hasil dari "Tutup".
+  static bool _isTcodeItemConfigured(dynamic item) {
+    if (item is! Map) return false;
+    final jnsDr = (item['jns_acc_dr'] ?? '').toString().trim();
+    final jnsCr = (item['jns_acc_cr'] ?? '').toString().trim();
+    return jnsDr.isNotEmpty || jnsCr.isNotEmpty;
+  }
+
   Future<void> _loadTcodeAksesAktif() async {
     final loadGen = ++_tcodeAksesLoadGen;
     _disposeTcodeAksesControllers();
@@ -385,7 +394,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       if (checkResult['value'] == 1 && checkResult['data'] != null) {
         final data = checkResult['data'];
         final List<dynamic> items = data is List ? data : (data['items'] ?? data['data'] ?? []);
-        isConfigured = items.isNotEmpty;
+        isConfigured = items.isNotEmpty && _isTcodeItemConfigured(items.first);
       }
 
       // Hanya tampilkan tcode yang statusnya "Y" di Transaksi Collector

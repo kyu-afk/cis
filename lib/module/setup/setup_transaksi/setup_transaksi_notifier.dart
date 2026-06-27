@@ -53,6 +53,15 @@ class SetupTransaksiNotifier extends ChangeNotifier {
   final TextEditingController noKredit    = TextEditingController();
   final TextEditingController namaKredit  = TextEditingController();
 
+  // Cek apakah item hasil inquiry benar-benar punya konfigurasi (jenis debit/kredit terisi),
+  // bukan cuma row kosong/null hasil dari "Tutup".
+  static bool _isItemConfigured(dynamic item) {
+    if (item is! Map) return false;
+    final jnsDr = (item['jns_acc_dr'] ?? '').toString().trim();
+    final jnsCr = (item['jns_acc_cr'] ?? '').toString().trim();
+    return jnsDr.isNotEmpty || jnsCr.isNotEmpty;
+  }
+
   // ==================== LOAD DATA (TCODE LIST) ====================
   Future<void> loadData() async {
     isLoading = true;
@@ -76,7 +85,7 @@ class SetupTransaksiNotifier extends ChangeNotifier {
         if (checkResult['value'] == 1 && checkResult['data'] != null) {
           final data = checkResult['data'];
           final List<dynamic> items = data is List ? data : (data['items'] ?? data['data'] ?? []);
-          if (items.isNotEmpty) {
+          if (items.isNotEmpty && _isItemConfigured(items.first)) {
             tcodeList[i]['is_configured'] = true;
           }
         }
@@ -111,13 +120,17 @@ class SetupTransaksiNotifier extends ChangeNotifier {
       final data = result['data'];
       // data bisa List atau Map tergantung respons middleware
       final List<dynamic> items = data is List ? data : (data['items'] ?? data['data'] ?? []);
-      if (items.isNotEmpty) {
+      if (items.isNotEmpty && _isItemConfigured(items.first)) {
         _fillFromInquiry(items.first);
         _oldData = Map<String, dynamic>.from(items.first as Map);
         isEditMode = false; // sudah ada data → readonly dulu
         // tandai configured di list
         final idx = tcodeList.indexWhere((e) => e['tcode'] == row['tcode']);
         if (idx != -1) tcodeList[idx]['is_configured'] = true;
+      } else {
+        // Row ada tapi semua field null (hasil Tutup) → anggap belum dikonfigurasi
+        final idx = tcodeList.indexWhere((e) => e['tcode'] == row['tcode']);
+        if (idx != -1) tcodeList[idx]['is_configured'] = false;
       }
     }
 
@@ -139,6 +152,60 @@ class SetupTransaksiNotifier extends ChangeNotifier {
   void enableEdit() {
     isEditMode = true;
     notifyListeners();
+  }
+
+  // ==================== TUTUP (kosongkan data & set status Y -> N) ====================
+  Future<void> closeTcode() async {
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context           : context,
+      barrierDismissible: false,
+      builder           : (_) => _SetupTransaksiCloseConfirmDialog(
+        tcode      : selectedTcode ?? '',
+        keterangan : _selectedKeterangan,
+      ),
+    );
+    if (confirmed != true) return;
+
+    isSaving = true;
+    notifyListeners();
+
+    final result = await SetupTransaksiRepository.saveSetupTransaksi(
+      trxCode    : selectedTcode ?? '',
+      keterangan : _selectedKeterangan,
+      data: [
+        {
+          'bpr_id'      : '',
+          'jns_trx'     : 0,
+          'noacc_dr'    : null,
+          'nama_acc_dr' : null,
+          'jns_acc_dr'  : null,
+          'noacc_cr'    : null,
+          'nama_acc_cr' : null,
+          'jns_acc_cr'  : null,
+        }
+      ],
+    );
+
+    isSaving = false;
+
+    if (result['value'] == 1) {
+      // Kosongkan form Debet & Kredit
+      _resetForm();
+      isEditMode = true;
+
+      // Set status TCODE ini kembali menjadi N (belum dikonfigurasi)
+      final idx = tcodeList.indexWhere((e) => e['tcode'] == selectedTcode);
+      if (idx != -1) tcodeList[idx]['is_configured'] = false;
+    }
+
+    notifyListeners();
+    _showResultDialog(
+      isSuccess: result['value'] == 1,
+      message  : result['value'] == 1
+          ? 'Konfigurasi berhasil ditutup'
+          : result['message'] ?? 'Gagal menutup konfigurasi',
+    );
   }
 
   void _resetForm() {
@@ -542,6 +609,103 @@ class _SetupTransaksiConfirmDialog extends StatelessWidget {
                   ),
                   onPressed: () => Navigator.pop(context, true),
                   child: const Text('Simpan', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Close (Tutup) Confirm Dialog — style box sama dengan dialog konfirmasi lain
+// ──────────────────────────────────────────────────────────────────────────────
+class _SetupTransaksiCloseConfirmDialog extends StatelessWidget {
+  final String tcode;
+  final String keterangan;
+
+  const _SetupTransaksiCloseConfirmDialog({
+    required this.tcode,
+    required this.keterangan,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Container(
+        width  : 420,
+        padding: const EdgeInsets.all(28),
+        child  : Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header strip — pakai colorcancel karena ini aksi destruktif
+            Container(
+              width : double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color       : colorcancel,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                const Icon(Icons.lock_outline, color: colortextwhite, size: 20),
+                const SizedBox(width: 10),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Konfirmasi Tutup Konfigurasi',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colortextwhite)),
+                  Text('TCODE $tcode — $keterangan',
+                      style: const TextStyle(fontSize: 12, color: colortextwhite)),
+                ]),
+              ]),
+            ),
+            const SizedBox(height: 20),
+
+            Container(
+              padding   : const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color       : const Color(0xFFF8FAF9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFDCE3DF), width: 0.5),
+              ),
+              child: const Text(
+                'Data Debet & Kredit untuk TCODE ini akan dikosongkan dan statusnya '
+                'akan berubah menjadi belum dikonfigurasi (N).\n\n'
+                'Tindakan ini langsung tersimpan ke server dan tidak dapat dibatalkan. Lanjutkan?',
+                style: TextStyle(fontSize: 13, color: Color(0xFF2C2C2A)),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF2C2C2A),
+                    side: const BorderSide(color: Color(0xFFDCE3DF)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Batal', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorcancel,
+                    foregroundColor: colortextwhite,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
             ]),

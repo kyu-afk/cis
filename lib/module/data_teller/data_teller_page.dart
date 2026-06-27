@@ -124,13 +124,13 @@ class DataTellerPage extends StatelessWidget {
 
   List<AppGridColumn> _buildGridColumns(DataTellerNotifier notifier) => [
     const AppGridColumn('no', 'No', width: 60, align: Alignment.center),
-    const AppGridColumn('namaTeller', 'Nama Teller', width: 250),
+    const AppGridColumn('namaTeller', 'Nama Teller', width: 160),
     const AppGridColumn('userId', 'User ID', width: 150),
     const AppGridColumn('noSbb', 'No SBB', width: 150),
-    const AppGridColumn('namasbb', 'Nama SBB', width: 200),
-    const AppGridColumn('kantor', 'Kantor', width: 200),
-    AppGridColumn('tglKadaluarsa', 'Tgl Kadaluarsa', width: 180, align: Alignment.centerRight, format: _formatDate),
-    AppGridColumn('status', 'Status', width: 150, align: Alignment.center, cellBuilder: (value) => _statusBadge(value)),
+    const AppGridColumn('namasbb', 'Nama SBB', width: 180),
+    const AppGridColumn('kantor', 'Kantor', width: 160),
+    AppGridColumn('tglKadaluarsa', 'Tgl Kadaluarsa', width: 140, align: Alignment.centerRight, format: _formatDate),
+    AppGridColumn('status', 'Status', width: 140, align: Alignment.center, cellBuilder: (value) => _statusBadge(value)),
     AppGridColumn(
       'aksi',
       'Aksi',

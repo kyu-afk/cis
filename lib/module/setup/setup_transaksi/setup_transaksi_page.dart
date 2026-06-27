@@ -30,6 +30,8 @@ class SetupTransaksiPage extends StatelessWidget {
                               key: value.keyForm,
                               child: Column(
                                 children: [
+                                  _buildInfoBanner(),
+                                  const SizedBox(height: 16),
                                   _buildMasterSection(value),
                                   if (value.showDetail) ...[
                                     const SizedBox(height: 24),
@@ -63,6 +65,31 @@ class SetupTransaksiPage extends StatelessWidget {
           fontSize: 24,
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xffF1ECFB),
+        border: Border.all(color: const Color(0xffD9CDF5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: Color(0xFF8B5CF6)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              "Daftar TCODE beserta status konfigurasinya ditampilkan di bawah ini.",
+              style: TextStyle(fontSize: 13, color: Color(0xFF4B3F6B)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -190,7 +217,18 @@ const SizedBox(height: 20),
                   children: [
                     const SizedBox(width: 120, child: Text("DEBET", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF8B5CF6)))),
                     const Spacer(),
-                    if (!value.isEditMode)
+                    if (!value.isEditMode) ...[
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colorcancel,
+                          side: const BorderSide(color: colorcancel),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        onPressed: () => value.closeTcode(),
+                        child: const Text("Tutup"),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: colorPrimary,
@@ -201,6 +239,7 @@ const SizedBox(height: 20),
                         onPressed: () => value.enableEdit(),
                         child: const Text("Ubah"),
                       ),
+                    ]
                   ],
                 ),
                 const SizedBox(height: 16),
