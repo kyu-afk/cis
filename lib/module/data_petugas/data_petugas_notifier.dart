@@ -6,6 +6,7 @@ import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../../models/index.dart';
 import '../../repository/collector_repository.dart';
 import '../../repository/users_access_repository.dart';
+import '../../repository/setup_transaksi_repository.dart';
 import '../../network/network.dart';
 import '../../pref/pref.dart';
 import '../../utils/colors.dart';
@@ -220,6 +221,74 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool enableLimitPpob = false;
   bool enableLimitKredit = false;
 
+  // ==================== AKSES TCODE (DINAMIS, GANTI 5 AKSES HARDCODE DI ATAS) ====================
+  // PENTING: API baru utk akses per-tcode ini belum dibuat backend.
+  // Checkbox + Min/Max/Pending di sini PURE local state buat tampilan dulu —
+  // tidak pernah dikirim/disimpan ke mana pun (lihat _konfirmasiAksi).
+  bool isLoadingTcodeAkses = false;
+  List<Map<String, dynamic>> tcodeAksesList = [];
+  // tiap item: {tcode, keterangan, checked, minCtrl, maxCtrl, pendingCtrl}
+
+  Future<void> _loadTcodeAksesAktif() async {
+    _disposeTcodeAksesControllers();
+    tcodeAksesList = [];
+    isLoadingTcodeAkses = true;
+    notifyListeners();
+
+    final result = await SetupTransaksiRepository.listTcode();
+    if (result['value'] != 1) {
+      isLoadingTcodeAkses = false;
+      notifyListeners();
+      return;
+    }
+
+    final List<dynamic> raw = result['data'] ?? [];
+    for (final e in raw) {
+      final tcode = (e['tcode'] ?? '').toString();
+      final keterangan = (e['keterangan'] ?? '').toString();
+      if (tcode.isEmpty) continue;
+
+      // Cek status di Transaksi Collector: Y kalau sudah ada konfigurasi tersimpan
+      final checkResult = await SetupTransaksiRepository.inquirySetupTransaksi(trxCode: tcode);
+      bool isConfigured = false;
+      if (checkResult['value'] == 1 && checkResult['data'] != null) {
+        final data = checkResult['data'];
+        final List<dynamic> items = data is List ? data : (data['items'] ?? data['data'] ?? []);
+        isConfigured = items.isNotEmpty;
+      }
+
+      // Hanya tampilkan tcode yang statusnya "Y" di Transaksi Collector
+      if (isConfigured) {
+        tcodeAksesList.add({
+          'tcode': tcode,
+          'keterangan': keterangan,
+          'checked': false,
+          'minCtrl': TextEditingController(text: '0'),
+          'maxCtrl': TextEditingController(text: '0'),
+          'pendingCtrl': TextEditingController(text: '0'),
+        });
+        notifyListeners(); // update progresif tiap tcode aktif ketemu
+      }
+    }
+
+    isLoadingTcodeAkses = false;
+    notifyListeners();
+  }
+
+  void _disposeTcodeAksesControllers() {
+    for (final item in tcodeAksesList) {
+      (item['minCtrl'] as TextEditingController).dispose();
+      (item['maxCtrl'] as TextEditingController).dispose();
+      (item['pendingCtrl'] as TextEditingController).dispose();
+    }
+  }
+
+  void toggleTcodeAkses(int index, bool? value) {
+    if (index < 0 || index >= tcodeAksesList.length) return;
+    tcodeAksesList[index]['checked'] = value ?? false;
+    notifyListeners();
+  }
+
   // Drawer mode
   String? drawerMode;
 
@@ -363,6 +432,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     drawerMode = 'tambah';
     scaffoldKey.currentState?.openEndDrawer();
     notifyListeners();
+    _loadTcodeAksesAktif();
   }
 
   void openDrawerForAction(DataPetugasModel petugas) {
@@ -505,12 +575,17 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     drawerMode = mode;
     notifyListeners();
+    if (mode == 'edit') {
+      _loadTcodeAksesAktif();
+    }
   }
 
   void closeDrawer() {
     drawerMode = null;
     scaffoldKey.currentState?.closeEndDrawer();
     _resetForm();
+    _disposeTcodeAksesControllers();
+    tcodeAksesList = [];
     notifyListeners();
   }
 
@@ -1500,30 +1575,36 @@ class DataPetugasNotifier extends ChangeNotifier {
     isSaving = true;
     notifyListeners();
 
+    // ⚠️ SEMENTARA: backend masih pakai API lama yang cuma kenal 5 akses hardcode
+    // di bawah ini (akses_setor/tartun/transfer/ppob/kredit). UI akses yang lama
+    // sudah diganti tampilan tcode dinamis (notifier.tcodeAksesList) di atas,
+    // tapi API baru utk akses per-tcode itu belum dibuat backend.
+    // Maka itu, semua akses lama DIPAKSA "N" dan limit lama DIPAKSA 0, apapun isi
+    // form/data lama sebelumnya. Isi notifier.tcodeAksesList TIDAK dikirim ke mana pun.
     final limitData = {
-      'limit_setor_tunai_trx_min': int.tryParse(limitSetorMinCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_setor_tunai_trx_max': int.tryParse(limitSetorMaxCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_pending_setor': int.tryParse(limitSetorPendingCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_tarik_tunai_trx_min': int.tryParse(limitTarikMinCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_tarik_tunai_trx_max': int.tryParse(limitTarikMaxCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_pending_tarik_tunai': int.tryParse(limitTarikPendingCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_transfer_trx_min': int.tryParse(limitTransferMinCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_transfer_trx_max': int.tryParse(limitTransferMaxCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_pending_trf': int.tryParse(limitTransferPendingCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_ppob_trx_min': int.tryParse(limitPpobMinCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_ppob_trx_max': int.tryParse(limitPpobMaxCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_pending_ppob': int.tryParse(limitPpobPendingCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_byrloan_trx_min': int.tryParse(limitKreditMinCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_byrloan_trx_max': int.tryParse(limitKreditMaxCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
-      'limit_pending_kredit': int.tryParse(limitKreditPendingCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
+      'limit_setor_tunai_trx_min': 0,
+      'limit_setor_tunai_trx_max': 0,
+      'limit_pending_setor': 0,
+      'limit_tarik_tunai_trx_min': 0,
+      'limit_tarik_tunai_trx_max': 0,
+      'limit_pending_tarik_tunai': 0,
+      'limit_transfer_trx_min': 0,
+      'limit_transfer_trx_max': 0,
+      'limit_pending_trf': 0,
+      'limit_ppob_trx_min': 0,
+      'limit_ppob_trx_max': 0,
+      'limit_pending_ppob': 0,
+      'limit_byrloan_trx_min': 0,
+      'limit_byrloan_trx_max': 0,
+      'limit_pending_kredit': 0,
     };
-    
+
     final aksesData = {
-      'akses_setor': aksesSetor,
-      'akses_tartun': aksesTarik,
-      'akses_transfer': aksesTransfer,
-      'akses_ppob': aksesPpob,
-      'akses_kredit': aksesKredit,
+      'akses_setor': false,
+      'akses_tartun': false,
+      'akses_transfer': false,
+      'akses_ppob': false,
+      'akses_kredit': false,
     };
 
     Map<String, dynamic> result = {};
@@ -1684,6 +1765,7 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposeTcodeAksesControllers();
     _debounceTimer?.cancel();
     scrollController.dispose();
     searchCtrl.dispose();

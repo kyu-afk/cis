@@ -530,6 +530,12 @@ class DataPetugasPage extends StatelessWidget {
                 // Akses / Limit Transaksi (hanya tambah & edit)
                 if (isFormMode) ...[
                   _sectionHeader('Akses / Limit Transaksi'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Sementara akses per-tcode di bawah belum tersambung ke backend '
+                    '(API baru belum dibuat) — checkbox & limit belum tersimpan ke server.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                  ),
                   const SizedBox(height: 12),
                   if (notifier.manualErrors['akses'] != null)
                     Padding(
@@ -539,70 +545,46 @@ class DataPetugasPage extends StatelessWidget {
                         style: const TextStyle(fontSize: 12, color: Colors.red),
                       ),
                     ),
-                  _LimitSection(
-                    label: 'Setor',
-                    minCtrl: notifier.limitSetorMinCtrl,
-                    maxCtrl: notifier.limitSetorMaxCtrl,
-                    pendingCtrl: notifier.limitSetorPendingCtrl,
-                    readOnly: isReadOnly,
-                    enabled: notifier.enableLimitSetor,
-                    aksesValue: notifier.aksesSetor,
-                    onAksesChanged: notifier.toggleAksesSetor,
-                    manualErrors: notifier.manualErrors,
-                    errorPrefix: 'setor',
-                  ),
-                  const SizedBox(height: 16),
-                  _LimitSection(
-                    label: 'Tarik Tunai',
-                    minCtrl: notifier.limitTarikMinCtrl,
-                    maxCtrl: notifier.limitTarikMaxCtrl,
-                    pendingCtrl: notifier.limitTarikPendingCtrl,
-                    readOnly: isReadOnly,
-                    enabled: notifier.enableLimitTarik,
-                    aksesValue: notifier.aksesTarik,
-                    onAksesChanged: notifier.toggleAksesTarik,
-                    manualErrors: notifier.manualErrors,
-                    errorPrefix: 'tarik',
-                  ),
-                  const SizedBox(height: 16),
-                  _LimitSection(
-                    label: 'Transfer',
-                    minCtrl: notifier.limitTransferMinCtrl,
-                    maxCtrl: notifier.limitTransferMaxCtrl,
-                    pendingCtrl: notifier.limitTransferPendingCtrl,
-                    readOnly: isReadOnly,
-                    enabled: notifier.enableLimitTransfer,
-                    aksesValue: notifier.aksesTransfer,
-                    onAksesChanged: notifier.toggleAksesTransfer,
-                    manualErrors: notifier.manualErrors,
-                    errorPrefix: 'transfer',
-                  ),
-                  const SizedBox(height: 16),
-                  _LimitSection(
-                    label: 'PPOB',
-                    minCtrl: notifier.limitPpobMinCtrl,
-                    maxCtrl: notifier.limitPpobMaxCtrl,
-                    pendingCtrl: notifier.limitPpobPendingCtrl,
-                    readOnly: isReadOnly,
-                    enabled: notifier.enableLimitPpob,
-                    aksesValue: notifier.aksesPpob,
-                    onAksesChanged: notifier.toggleAksesPpob,
-                    manualErrors: notifier.manualErrors,
-                    errorPrefix: 'ppob',
-                  ),
-                  const SizedBox(height: 16),
-                  _LimitSection(
-                    label: 'Kredit',
-                    minCtrl: notifier.limitKreditMinCtrl,
-                    maxCtrl: notifier.limitKreditMaxCtrl,
-                    pendingCtrl: notifier.limitKreditPendingCtrl,
-                    readOnly: isReadOnly,
-                    enabled: notifier.enableLimitKredit,
-                    aksesValue: notifier.aksesKredit,
-                    onAksesChanged: notifier.toggleAksesKredit,
-                    manualErrors: notifier.manualErrors,
-                    errorPrefix: 'kredit',
-                  ),
+                  if (notifier.isLoadingTcodeAkses && notifier.tcodeAksesList.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  else if (notifier.tcodeAksesList.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xfff5f5f5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xffDCE3DF)),
+                      ),
+                      child: const Text(
+                        'Belum ada tcode dengan status aktif (Y) di Transaksi Collector.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    )
+                  else
+                    ...notifier.tcodeAksesList.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final item = entry.value;
+                      final tcode = item['tcode'] as String;
+                      final checked = item['checked'] as bool;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _LimitSection(
+                          label: '${item['keterangan']} ($tcode)',
+                          minCtrl: item['minCtrl'] as TextEditingController,
+                          maxCtrl: item['maxCtrl'] as TextEditingController,
+                          pendingCtrl: item['pendingCtrl'] as TextEditingController,
+                          readOnly: isReadOnly,
+                          enabled: checked,
+                          aksesValue: checked,
+                          onAksesChanged: (v) => notifier.toggleTcodeAkses(idx, v),
+                          manualErrors: notifier.manualErrors,
+                          errorPrefix: 'tcode_$tcode',
+                        ),
+                      );
+                    }),
                   const SizedBox(height: 24),
                 ],
               ],
