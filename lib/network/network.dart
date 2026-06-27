@@ -53,6 +53,10 @@ class NetworkURL {
 
   // ---------- Collector (Petugas) ----------
   static String inquiryCollector() => "$url_go3/cis/collector/inquiry";
+  static String inquiryCollectorDb() => "$url_go3/cis/collector/inquiry-db";
+  static String resolveUserIdCollector() => "$url_go3/cis/collector/resolve-userid";
+  static String syncRepairCollector()   => "$url_go3/cis/collector/sync-repair";
+  static String syncBackfillCollector() => "$url_go3/cis/collector/sync-backfill";
   static String insertCollector() => "$url_go3/cis/collector/insert";
   static String updateCollector() => "$url_go3/cis/collector/update";
   static String deleteCollector() => "$url_go3/cis/collector/delete";
@@ -76,10 +80,15 @@ class NetworkURL {
   static String blokirTeller()          => "$url_go3/cis/teller/blokir";
   static String unblokirTeller()        => "$url_go3/cis/teller/unblokir";
   static String resetPasswordTeller()   => "$url_go3/cis/teller/reset-password";
+  static String resolveUserIdTeller()   => "$url_go3/cis/teller/resolve-userid";
+  static String syncRepairTeller()      => "$url_go3/cis/teller/sync-repair";
+  static String syncBackfillTeller()    => "$url_go3/cis/teller/sync-backfill";
   static String bukaTransaksiTeller()   => "$url_go3/cis/teller/buka-transaksi";
   static String tutupTransaksiTeller()  => "$url_go3/cis/teller/tutup-transaksi";
   static String limitInquiryTeller()    => "$url_go3/cis/teller/limit-inquiry";
   static String limitSaveTeller()       => "$url_go3/cis/teller/limit-save";
+  static String limitInquiryCollector() => "$url_go3/cis/collector/limit-inquiry";
+  static String limitSaveCollector()    => "$url_go3/cis/collector/limit-save";
  
   // ---------- Pengisian Modal ----------
   static String inquiryPengisianModal()  => "$url_go3/cis/pengisian-modal/inquiry";

@@ -116,6 +116,55 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
 }
 
   // ==================== INQUIRY ====================
+  static Future<Map<String, dynamic>> resolveUserIdTeller({
+    String? userId,
+    String? noHp,
+    String? backendId,
+    String? bprId,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = <String, dynamic>{'bpr_id': bprId ?? session.bprId};
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
+
+      final response = await dio.post(NetworkURL.resolveUserIdTeller(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+      final rawData = decoded['data'];
+      final resolved = rawData is Map ? (rawData['userid'] ?? '').toString() : '';
+      return {'value': _mapCode(decoded), 'message': _mapMessage(decoded), 'userid': resolved};
+    } catch (e) {
+      return {'value': 0, 'message': _dioErrorMessage(e), 'userid': ''};
+    }
+  }
+
+  static Future<Map<String, dynamic>> syncRepairTeller({String? bprId, bool autoLink = true}) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {'bpr_id': bprId ?? session.bprId, 'page': 1, 'size': 5000, 'auto_link': autoLink};
+      final response = await dio.post(NetworkURL.syncRepairTeller(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+      return {'value': _mapCode(decoded), 'message': _mapMessage(decoded), 'data': decoded['data']};
+    } catch (e) {
+      return {'value': 0, 'message': _dioErrorMessage(e), 'data': null};
+    }
+  }
+
+  static Future<Map<String, dynamic>> syncBackfillTeller({required List<Map<String, dynamic>> items}) async {
+    try {
+      final dio = await _dioWithToken();
+      final response = await dio.post(NetworkURL.syncBackfillTeller(), data: jsonEncode({'items': items}));
+      final decoded = _safeDecode(response.data);
+      return {'value': _mapCode(decoded), 'message': _mapMessage(decoded), 'data': decoded['data']};
+    } catch (e) {
+      return {'value': 0, 'message': _dioErrorMessage(e), 'data': null};
+    }
+  }
+
   static Future<Map<String, dynamic>> inquiryTeller({
     String? filterNama,
     String? filterUserId,
@@ -262,7 +311,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'sbb_teller':       sbbTeller,
         'nama_sbb':         namaSbb,
         'tanggal_expired':  tanggalExpired,
-        'batch':            batch,
+        'Batch':            batch,
         'bpr_id':           bprId ?? session.bprId,
         'userlogin':        session.usersId,
         'term':             'WEB',
@@ -481,17 +530,20 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
 
   // ==================== LIMIT TRANSAKSI ====================
   static Future<Map<String, dynamic>> getLimitTeller({
-    required String userId,
+    String? userId,
+    String? noHp,
+    String? backendId,
     String? bprId,
   }) async {
     try {
       final dio     = await _dioWithToken();
       final session = await Pref().getUsers();
 
-      final body = {
-        'userid': userId,
-        'bpr_id': bprId ?? session.bprId,
-      };
+      final body = <String, dynamic>{'bpr_id': bprId ?? session.bprId};
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
 
       if (kDebugMode) {
         print('LIMIT INQUIRY TELLER URL : ${NetworkURL.limitInquiryTeller()}');
@@ -518,7 +570,9 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
   }
 
   static Future<Map<String, dynamic>> saveLimitTeller({
-    required String userId,
+    String? userId,
+    String? noHp,
+    String? backendId,
     required double minSetorTunai,
     required double limitSetorTunai,
     required double minTarikTunai,
@@ -531,8 +585,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
       final dio     = await _dioWithToken();
       final session = await Pref().getUsers();
 
-      final body = {
-        'userid':    userId,
+      final body = <String, dynamic>{
         'bpr_id':    bprId ?? session.bprId,
         'userlogin': session.usersId,
         'term':      'WEB',
@@ -542,6 +595,10 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
           {'tcode': '2300', 'min_nominal': minPindahBuku,  'limit_nominal': limitPindahBuku},
         ],
       };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
 
       if (kDebugMode) {
         print('LIMIT SAVE TELLER URL : ${NetworkURL.limitSaveTeller()}');
@@ -565,19 +622,24 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
 
   // ==================== RESET PASSWORD ====================
   static Future<Map<String, dynamic>> resetPasswordTeller({
-    required String userId,
+    String? userId,
+    String? noHp,
+    String? backendId,
     String? bprId,
   }) async {
     try {
       final dio     = await _dioWithToken();
       final session = await Pref().getUsers();
 
-      final body = {
-        'userid':    userId,
+      final body = <String, dynamic>{
         'userlogin': session.usersId,
         'term':      'WEB',
         'bpr_id':    bprId ?? session.bprId,
       };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
 
       if (kDebugMode) {
         print('RESET PASSWORD TELLER URL : ${NetworkURL.resetPasswordTeller()}');

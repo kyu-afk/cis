@@ -222,20 +222,149 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool enableLimitKredit = false;
 
   // ==================== AKSES TCODE (DINAMIS, GANTI 5 AKSES HARDCODE DI ATAS) ====================
-  // PENTING: API baru utk akses per-tcode ini belum dibuat backend.
-  // Checkbox + Min/Max/Pending di sini PURE local state buat tampilan dulu —
-  // tidak pernah dikirim/disimpan ke mana pun (lihat _konfirmasiAksi).
+  // Disimpan ke cis_limit_petugas via _saveTcodeAksesLimit() setelah insert/update sukses.
+  // Centang = is_aktif Y; uncentang = is_aktif N dan semua limit direset ke 0.
   bool isLoadingTcodeAkses = false;
+  int _tcodeAksesLoadGen = 0;
   List<Map<String, dynamic>> tcodeAksesList = [];
   // tiap item: {tcode, keterangan, checked, minCtrl, maxCtrl, pendingCtrl}
 
+  // Cache lookup userid dari web service DB (key: nohp / backend_id)
+  final Map<String, String> _userIdByNoHp = {};
+  final Map<String, String> _userIdByBackendId = {};
+
+  String _resolvePetugasUserId() {
+    if (drawerMode == 'edit') {
+      final fromSelected = selectedPetugas?.userId?.trim() ?? '';
+      if (fromSelected.isNotEmpty) return fromSelected;
+    }
+    final fromCtrl = userIdCtrl.text.trim();
+    if (fromCtrl.isNotEmpty) return fromCtrl;
+
+    final noHp = noHpCtrl.text.trim();
+    if (noHp.isNotEmpty && _userIdByNoHp.containsKey(noHp)) {
+      return _userIdByNoHp[noHp]!;
+    }
+    final backendId = selectedPetugas?.id?.trim() ?? '';
+    if (backendId.isNotEmpty && _userIdByBackendId.containsKey(backendId)) {
+      return _userIdByBackendId[backendId]!;
+    }
+    return '';
+  }
+
+  Future<String> _resolvePetugasUserIdAsync() async {
+    final cached = _resolvePetugasUserId();
+    if (cached.isNotEmpty) return cached;
+
+    final result = await CollectorRepository.resolveUserIdCollector(
+      userId: userIdCtrl.text.trim().isNotEmpty ? userIdCtrl.text.trim() : null,
+      noHp: noHpCtrl.text.trim().isNotEmpty ? noHpCtrl.text.trim() : null,
+      backendId: selectedPetugas?.id,
+    );
+    if (result['value'] == 1) {
+      final resolved = (result['userid'] ?? '').toString();
+      if (resolved.isNotEmpty) {
+        _cacheResolvedUserId(resolved);
+        if (selectedPetugas != null) selectedPetugas!.userId = resolved;
+        if (userIdCtrl.text.trim().isEmpty) userIdCtrl.text = resolved;
+        return resolved;
+      }
+    }
+    return '';
+  }
+
+  void _cacheResolvedUserId(String userId) {
+    final noHp = noHpCtrl.text.trim();
+    if (noHp.isNotEmpty) _userIdByNoHp[noHp] = userId;
+    final backendId = selectedPetugas?.id?.trim() ?? '';
+    if (backendId.isNotEmpty) _userIdByBackendId[backendId] = userId;
+  }
+
+  void _buildUserIdLookupFromEnrichedList(List<DataPetugasModel> list) {
+    _userIdByNoHp.clear();
+    _userIdByBackendId.clear();
+    for (final p in list) {
+      final userId = p.userId?.trim() ?? '';
+      if (userId.isEmpty) continue;
+      final noHp = (p.noHp ?? '').trim();
+      if (noHp.isNotEmpty) _userIdByNoHp[noHp] = userId;
+      final backendId = (p.id ?? '').trim();
+      if (backendId.isNotEmpty) _userIdByBackendId[backendId] = userId;
+    }
+  }
+
+  /// Sinkronkan tcode dinamis ke field akses/limit lama middleware (1000=setor, 1100=tarik, 2300=transfer).
+  ({Map<String, dynamic> limitData, Map<String, bool> aksesData}) _buildMiddlewarePayloadFromTcode() {
+    final limitData = <String, dynamic>{
+      'limit_setor_tunai_trx_min': 0,
+      'limit_setor_tunai_trx_max': 0,
+      'limit_pending_setor': 0,
+      'limit_tarik_tunai_trx_min': 0,
+      'limit_tarik_tunai_trx_max': 0,
+      'limit_pending_tarik_tunai': 0,
+      'limit_transfer_trx_min': 0,
+      'limit_transfer_trx_max': 0,
+      'limit_pending_trf': 0,
+      'limit_ppob_trx_min': 0,
+      'limit_ppob_trx_max': 0,
+      'limit_pending_ppob': 0,
+      'limit_byrloan_trx_min': 0,
+      'limit_byrloan_trx_max': 0,
+      'limit_pending_kredit': 0,
+    };
+    final aksesData = <String, bool>{
+      'akses_setor': false,
+      'akses_tartun': false,
+      'akses_transfer': false,
+      'akses_ppob': false,
+      'akses_kredit': false,
+    };
+
+    const tcodeMap = {
+      '1000': {
+        'akses': 'akses_setor',
+        'min': 'limit_setor_tunai_trx_min',
+        'max': 'limit_setor_tunai_trx_max',
+        'pending': 'limit_pending_setor',
+      },
+      '1100': {
+        'akses': 'akses_tartun',
+        'min': 'limit_tarik_tunai_trx_min',
+        'max': 'limit_tarik_tunai_trx_max',
+        'pending': 'limit_pending_tarik_tunai',
+      },
+      '2300': {
+        'akses': 'akses_transfer',
+        'min': 'limit_transfer_trx_min',
+        'max': 'limit_transfer_trx_max',
+        'pending': 'limit_pending_trf',
+      },
+    };
+
+    for (final item in tcodeAksesList) {
+      final tcode = item['tcode']?.toString() ?? '';
+      final cfg = tcodeMap[tcode];
+      if (cfg == null) continue;
+      final checked = item['checked'] == true;
+      aksesData[cfg['akses']!] = checked;
+      if (!checked) continue;
+      limitData[cfg['min']!] = _parseNominal((item['minCtrl'] as TextEditingController).text);
+      limitData[cfg['max']!] = _parseNominal((item['maxCtrl'] as TextEditingController).text);
+      limitData[cfg['pending']!] = _parseNominal((item['pendingCtrl'] as TextEditingController).text);
+    }
+
+    return (limitData: limitData, aksesData: aksesData);
+  }
+
   Future<void> _loadTcodeAksesAktif() async {
+    final loadGen = ++_tcodeAksesLoadGen;
     _disposeTcodeAksesControllers();
     tcodeAksesList = [];
     isLoadingTcodeAkses = true;
     notifyListeners();
 
     final result = await SetupTransaksiRepository.listTcode();
+    if (loadGen != _tcodeAksesLoadGen) return;
     if (result['value'] != 1) {
       isLoadingTcodeAkses = false;
       notifyListeners();
@@ -243,7 +372,9 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
 
     final List<dynamic> raw = result['data'] ?? [];
+    final loadedItems = <Map<String, dynamic>>[];
     for (final e in raw) {
+      if (loadGen != _tcodeAksesLoadGen) return;
       final tcode = (e['tcode'] ?? '').toString();
       final keterangan = (e['keterangan'] ?? '').toString();
       if (tcode.isEmpty) continue;
@@ -259,20 +390,110 @@ class DataPetugasNotifier extends ChangeNotifier {
 
       // Hanya tampilkan tcode yang statusnya "Y" di Transaksi Collector
       if (isConfigured) {
-        tcodeAksesList.add({
+        loadedItems.add({
           'tcode': tcode,
           'keterangan': keterangan,
           'checked': false,
           'minCtrl': TextEditingController(text: '0'),
           'maxCtrl': TextEditingController(text: '0'),
           'pendingCtrl': TextEditingController(text: '0'),
+          // Snapshot nilai ASLI (sebelum user ubah apa pun), dipakai buat
+          // deteksi perubahan & tampilan "Sebelum -> Sesudah" di konfirmasi.
+          'origChecked': false,
+          'origMin': '0',
+          'origMax': '0',
+          'origPending': '0',
         });
-        notifyListeners(); // update progresif tiap tcode aktif ketemu
       }
     }
 
+    if (loadGen != _tcodeAksesLoadGen) return;
+    tcodeAksesList = loadedItems;
+
+    // Kalau lagi edit petugas yang sudah ada, timpa nilai default di atas
+    // dengan limit yang sudah pernah disimpan sebelumnya (kalau ada).
+    final existingUserId = await _resolvePetugasUserIdAsync();
+    if (existingUserId.isNotEmpty) {
+      final limitResult = await CollectorRepository.getLimitPetugas(
+        userId: existingUserId,
+        noHp: noHpCtrl.text.trim().isNotEmpty ? noHpCtrl.text.trim() : null,
+        backendId: selectedPetugas?.id,
+      );
+      if (loadGen != _tcodeAksesLoadGen) return;
+      if (limitResult['value'] == 1) {
+        final savedLimits = limitResult['limits'] as List<dynamic>;
+        final rupiahFmt = NumberFormat('#,###', 'id_ID');
+        for (final saved in savedLimits) {
+          final tcode = saved['tcode']?.toString() ?? '';
+          final idx = tcodeAksesList.indexWhere((item) => item['tcode'] == tcode);
+          if (idx == -1) continue;
+          final isAktif = saved['is_aktif'] == true;
+          final min = isAktif ? ((saved['min_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
+          final max = isAktif ? ((saved['limit_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
+          final pending = isAktif ? ((saved['pending_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
+          tcodeAksesList[idx]['checked'] = isAktif;
+          (tcodeAksesList[idx]['minCtrl'] as TextEditingController).text =
+              min == 0 ? '0' : rupiahFmt.format(min.toInt());
+          (tcodeAksesList[idx]['maxCtrl'] as TextEditingController).text =
+              max == 0 ? '0' : rupiahFmt.format(max.toInt());
+          (tcodeAksesList[idx]['pendingCtrl'] as TextEditingController).text =
+              pending == 0 ? '0' : rupiahFmt.format(pending.toInt());
+
+          // Snapshot setelah keisi nilai dari server, BUKAN sebelum.
+          tcodeAksesList[idx]['origChecked'] = isAktif;
+          tcodeAksesList[idx]['origMin'] = (tcodeAksesList[idx]['minCtrl'] as TextEditingController).text;
+          tcodeAksesList[idx]['origMax'] = (tcodeAksesList[idx]['maxCtrl'] as TextEditingController).text;
+          tcodeAksesList[idx]['origPending'] = (tcodeAksesList[idx]['pendingCtrl'] as TextEditingController).text;
+        }
+      }
+    }
+
+    if (loadGen != _tcodeAksesLoadGen) return;
     isLoadingTcodeAkses = false;
     notifyListeners();
+  }
+
+  double _parseNominal(String text) {
+    final clean = text.trim().replaceAll('.', '').replaceAll(',', '');
+    return double.tryParse(clean) ?? 0.0;
+  }
+
+  Future<Map<String, dynamic>> _saveTcodeAksesLimit() async {
+    final uid = await _resolvePetugasUserIdAsync();
+    if (uid.isEmpty) {
+      return {'value': 0, 'message': 'User ID petugas tidak ditemukan'};
+    }
+    if (isLoadingTcodeAkses) {
+      return {'value': 0, 'message': 'Data tcode masih dimuat. Tunggu sebentar lalu coba lagi.'};
+    }
+    if (tcodeAksesList.isEmpty) {
+      return {'value': 0, 'message': 'Belum ada tcode aktif yang bisa disimpan'};
+    }
+
+    final limits = tcodeAksesList.map((item) {
+      final checked = item['checked'] == true;
+      return {
+        'tcode': item['tcode'],
+        'keterangan': item['keterangan'],
+        'is_aktif': checked,
+        'min_nominal': checked
+            ? _parseNominal((item['minCtrl'] as TextEditingController).text)
+            : 0.0,
+        'limit_nominal': checked
+            ? _parseNominal((item['maxCtrl'] as TextEditingController).text)
+            : 0.0,
+        'pending_nominal': checked
+            ? _parseNominal((item['pendingCtrl'] as TextEditingController).text)
+            : 0.0,
+      };
+    }).toList();
+
+    return CollectorRepository.saveLimitPetugas(
+      userId: uid,
+      noHp: noHpCtrl.text.trim().isNotEmpty ? noHpCtrl.text.trim() : null,
+      backendId: selectedPetugas?.id,
+      limits: limits,
+    );
   }
 
   void _disposeTcodeAksesControllers() {
@@ -285,7 +506,17 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   void toggleTcodeAkses(int index, bool? value) {
     if (index < 0 || index >= tcodeAksesList.length) return;
-    tcodeAksesList[index]['checked'] = value ?? false;
+    final checked = value ?? false;
+    tcodeAksesList[index]['checked'] = checked;
+    if (!checked) {
+      final tcode = tcodeAksesList[index]['tcode']?.toString() ?? '';
+      (tcodeAksesList[index]['minCtrl'] as TextEditingController).text = '0';
+      (tcodeAksesList[index]['maxCtrl'] as TextEditingController).text = '0';
+      (tcodeAksesList[index]['pendingCtrl'] as TextEditingController).text = '0';
+      _manualErrors.remove('tcode_${tcode}_min');
+      _manualErrors.remove('tcode_${tcode}_max');
+      _manualErrors.remove('tcode_${tcode}_pending');
+    }
     notifyListeners();
   }
 
@@ -388,6 +619,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     if (result['value'] == 1) {
       final List<dynamic> data = result['data'] ?? [];
       final allList = data.map((item) => DataPetugasModel.fromJson(item as Map<String, dynamic>)).toList();
+      _buildUserIdLookupFromEnrichedList(allList);
       _list = UserLevelHelper.applyKantorFilter(
         list: allList,
         users: _sessionUser,
@@ -654,7 +886,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       }
     }
     
-    if (isTambah) {
+    if (isTambah || isEdit) {
       final nipError = _validateNipManual(nipCtrl.text.trim());
       if (nipError != null) {
         errors['nip'] = nipError;
@@ -662,7 +894,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       }
     }
     
-    if (isTambah) {
+    if (isTambah || isEdit) {
       final kodeError = _validateKodePetugasManual(kodePetugasCtrl.text.trim());
       if (kodeError != null) {
         errors['kodePetugas'] = kodeError;
@@ -686,7 +918,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       }
     }
     
-    if (isTambah) {
+    if (isTambah || isEdit) {
       if (selectedKantor == null) {
         errors['kantor'] = 'Pilih kantor terlebih dahulu';
         allValid = false;
@@ -694,27 +926,43 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah || isEdit) {
-      final anyAkses = aksesSetor || aksesTarik || aksesTransfer || aksesPpob || aksesKredit;
+      if (isLoadingTcodeAkses) {
+        errors['akses'] = 'Data tcode masih dimuat, tunggu sebentar';
+        allValid = false;
+      }
+      // FIX: sertakan tcode dinamis (tcodeAksesList) dalam pengecekan akses,
+      // karena UI sudah beralih ke tcode — aksesSetor/aksesTarik dll tidak lagi dicentang user.
+      final anyAkses = aksesSetor || aksesTarik || aksesTransfer || aksesPpob || aksesKredit
+          || tcodeAksesList.any((item) => item['checked'] == true);
       if (!anyAkses) {
         errors['akses'] = 'Pilih minimal 1 akses transaksi';
         allValid = false;
       }
     }
 
-    if (aksesSetor) {
-      if (!_validateLimitFields('setor', limitSetorMinCtrl, limitSetorMaxCtrl, limitSetorPendingCtrl, errors)) allValid = false;
-    }
-    if (aksesTarik) {
-      if (!_validateLimitFields('tarik', limitTarikMinCtrl, limitTarikMaxCtrl, limitTarikPendingCtrl, errors)) allValid = false;
-    }
-    if (aksesTransfer) {
-      if (!_validateLimitFields('transfer', limitTransferMinCtrl, limitTransferMaxCtrl, limitTransferPendingCtrl, errors)) allValid = false;
-    }
-    if (aksesPpob) {
-      if (!_validateLimitFields('ppob', limitPpobMinCtrl, limitPpobMaxCtrl, limitPpobPendingCtrl, errors)) allValid = false;
-    }
-    if (aksesKredit) {
-      if (!_validateLimitFields('kredit', limitKreditMinCtrl, limitKreditMaxCtrl, limitKreditPendingCtrl, errors)) allValid = false;
+    // FIX: validasi limit lama (aksesSetor/aksesTarik/dll) dinonaktifkan karena
+    // UI sudah beralih ke tcode dinamis (tcodeAksesList). Field limit lama
+    // (limitSetorMinCtrl dll) tidak ditampilkan di UI, nilainya selalu 0,
+    // sehingga _validateLimitFields selalu gagal dan menghalangi proses simpan.
+    // Validasi limit kini hanya berlaku untuk tcode dinamis (blok di bawah).
+
+    // Akses transaksi per-tcode (dinamis) — Min gak boleh lebih besar dari Max,
+    // tapi cuma divalidasi kalau aksesnya aktif/dicentang. Beda sama
+    // _validateLimitFields yang mewajibkan non-zero, di sini 0 itu valid
+    // (artinya "tanpa limit"), cuma urutan min<=max yang dicek.
+    for (final item in tcodeAksesList) {
+      if (item['checked'] != true) continue;
+      final tcode = item['tcode']?.toString() ?? '';
+      final minCtrl = item['minCtrl'] as TextEditingController;
+      final maxCtrl = item['maxCtrl'] as TextEditingController;
+      final minStr = minCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+      final maxStr = maxCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+      final minVal = int.tryParse(minStr) ?? 0;
+      final maxVal = int.tryParse(maxStr) ?? 0;
+      if (maxVal > 0 && minVal > maxVal) {
+        errors['tcode_${tcode}_max'] = 'Min tidak boleh lebih besar dari Max';
+        allValid = false;
+      }
     }
     
     _manualErrors = errors;
@@ -1490,8 +1738,16 @@ class DataPetugasNotifier extends ChangeNotifier {
     
     _addChange(changes, 'Nama', old.nama, namaCtrl.text.trim());
     _addChange(changes, 'No HP', old.noHp, noHpCtrl.text.trim());
+    _addChange(changes, 'NIP', old.nip, nipCtrl.text.trim());
+    _addChange(changes, 'Kode Petugas', old.kodePetugas, kodePetugasCtrl.text.trim());
     _addChange(changes, 'No SBB', old.noSbb, noSbbCtrl.text.trim());
     _addChange(changes, 'Nama SBB', old.namaSbb, namaSbbCtrl.text.trim());
+
+    final oldKantor = getNamaKantor(old.kdKantor);
+    final newKantor = selectedKantor?.namaKantor ?? '-';
+    if (oldKantor != newKantor) {
+      changes['Kantor'] = {'old': oldKantor, 'new': newKantor};
+    }
     
     _addBoolChange(changes, 'Akses Setor', old.aksesSetor, aksesSetor);
     _addBoolChange(changes, 'Akses Tarik', old.aksesTarik, aksesTarik);
@@ -1501,6 +1757,39 @@ class DataPetugasNotifier extends ChangeNotifier {
     
     if (isChangePassword && passwordCtrl.text.trim().isNotEmpty) {
       changes['Password'] = {'old': '********', 'new': '******** (diubah)'};
+    }
+
+    // Akses & limit per-tcode (dinamis) — sebelumnya gak pernah dicek sama
+    // sekali di sini, makanya kalau yang diubah cuma ini, popup bilang
+    // "Tidak ada perubahan" padahal datanya beneran berubah & disimpan
+    // lewat _saveTcodeAksesLimit().
+    for (final item in tcodeAksesList) {
+      final tcode = item['tcode']?.toString() ?? '';
+      final keterangan = item['keterangan']?.toString() ?? tcode;
+      final checked = item['checked'] == true;
+      final origChecked = item['origChecked'] == true;
+      final minVal = (item['minCtrl'] as TextEditingController).text.trim();
+      final maxVal = (item['maxCtrl'] as TextEditingController).text.trim();
+      final pendingVal = (item['pendingCtrl'] as TextEditingController).text.trim();
+      final origMin = (item['origMin'] ?? '0').toString();
+      final origMax = (item['origMax'] ?? '0').toString();
+      final origPending = (item['origPending'] ?? '0').toString();
+
+      if (checked != origChecked) {
+        changes['Akses $keterangan ($tcode)'] = {
+          'old': origChecked ? 'Aktif' : 'Tidak Aktif',
+          'new': checked ? 'Aktif' : 'Tidak Aktif',
+        };
+      }
+      if (minVal != origMin) {
+        changes['Min $keterangan ($tcode)'] = {'old': origMin, 'new': minVal.isEmpty ? '0' : minVal};
+      }
+      if (maxVal != origMax) {
+        changes['Max $keterangan ($tcode)'] = {'old': origMax, 'new': maxVal.isEmpty ? '0' : maxVal};
+      }
+      if (pendingVal != origPending) {
+        changes['Pending $keterangan ($tcode)'] = {'old': origPending, 'new': pendingVal.isEmpty ? '0' : pendingVal};
+      }
     }
     
     return changes;
@@ -1546,8 +1835,11 @@ class DataPetugasNotifier extends ChangeNotifier {
       isSaving = true;
       notifyListeners();
 
+      final resolvedUserId = await _resolvePetugasUserIdAsync();
       final result = await CollectorRepository.resetPasswordCollector(
-        userId: selectedPetugas?.userId ?? '',
+        userId: resolvedUserId.isNotEmpty ? resolvedUserId : null,
+        noHp: selectedPetugas?.noHp ?? noHpCtrl.text.trim(),
+        backendId: selectedPetugas?.id,
       );
 
       isSaving = false;
@@ -1575,39 +1867,12 @@ class DataPetugasNotifier extends ChangeNotifier {
     isSaving = true;
     notifyListeners();
 
-    // ⚠️ SEMENTARA: backend masih pakai API lama yang cuma kenal 5 akses hardcode
-    // di bawah ini (akses_setor/tartun/transfer/ppob/kredit). UI akses yang lama
-    // sudah diganti tampilan tcode dinamis (notifier.tcodeAksesList) di atas,
-    // tapi API baru utk akses per-tcode itu belum dibuat backend.
-    // Maka itu, semua akses lama DIPAKSA "N" dan limit lama DIPAKSA 0, apapun isi
-    // form/data lama sebelumnya. Isi notifier.tcodeAksesList TIDAK dikirim ke mana pun.
-    final limitData = {
-      'limit_setor_tunai_trx_min': 0,
-      'limit_setor_tunai_trx_max': 0,
-      'limit_pending_setor': 0,
-      'limit_tarik_tunai_trx_min': 0,
-      'limit_tarik_tunai_trx_max': 0,
-      'limit_pending_tarik_tunai': 0,
-      'limit_transfer_trx_min': 0,
-      'limit_transfer_trx_max': 0,
-      'limit_pending_trf': 0,
-      'limit_ppob_trx_min': 0,
-      'limit_ppob_trx_max': 0,
-      'limit_pending_ppob': 0,
-      'limit_byrloan_trx_min': 0,
-      'limit_byrloan_trx_max': 0,
-      'limit_pending_kredit': 0,
-    };
-
-    final aksesData = {
-      'akses_setor': false,
-      'akses_tartun': false,
-      'akses_transfer': false,
-      'akses_ppob': false,
-      'akses_kredit': false,
-    };
+    final middlewarePayload = _buildMiddlewarePayloadFromTcode();
+    final limitData = middlewarePayload.limitData;
+    final aksesData = middlewarePayload.aksesData;
 
     Map<String, dynamic> result = {};
+    Map<String, dynamic>? limitResult;
 
     switch (drawerMode) {
       case 'tambah':
@@ -1624,11 +1889,15 @@ class DataPetugasNotifier extends ChangeNotifier {
           limitData: limitData,
           aksesData: aksesData,
         );
+        if (result['value'] == 1 && tcodeAksesList.isNotEmpty) {
+          limitResult = await _saveTcodeAksesLimit();
+        }
         break;
       case 'edit':
+        final editUserId = await _resolvePetugasUserIdAsync();
         result = await CollectorRepository.updateCollector(
           id: selectedPetugas?.id ?? '',
-          userId: userIdCtrl.text.trim(),
+          userId: editUserId,
           nama: namaCtrl.text.trim(),
           noHp: noHpCtrl.text.trim(),
           nip: nipCtrl.text.trim(),
@@ -1640,6 +1909,9 @@ class DataPetugasNotifier extends ChangeNotifier {
           limitData: limitData,
           aksesData: aksesData,
         );
+        if (result['value'] == 1 && tcodeAksesList.isNotEmpty) {
+          limitResult = await _saveTcodeAksesLimit();
+        }
         break;
       case 'hapus':
         result = await CollectorRepository.deleteCollector(
@@ -1667,6 +1939,15 @@ class DataPetugasNotifier extends ChangeNotifier {
 
     isSaving = false;
     notifyListeners();
+
+    if (result['value'] == 1 && limitResult != null && limitResult['value'] != 1) {
+      _showErrorDialog(
+        limitResult['message']?.toString().isNotEmpty == true
+            ? limitResult['message'].toString()
+            : 'Gagal menyimpan limit transaksi per-tcode',
+      );
+      return;
+    }
 
     final errorMessage = result['message']?.toString() ?? 'Gagal melakukan operasi';
     

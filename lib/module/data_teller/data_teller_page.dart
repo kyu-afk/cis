@@ -569,18 +569,21 @@ class DataTellerPage extends StatelessWidget {
                     label: 'Setor Tunai (1000)',
                     minCtrl: notifier.limitMinSetorTunaiCtrl,
                     maxCtrl: notifier.limitSetorTunaiCtrl,
+                    errorText: notifier.manualErrors['limitSetor'],
                   ),
                   const SizedBox(height: 12),
                   _limitTcodeRow(
                     label: 'Tarik Tunai (1100)',
                     minCtrl: notifier.limitMinTarikTunaiCtrl,
                     maxCtrl: notifier.limitTarikTunaiCtrl,
+                    errorText: notifier.manualErrors['limitTarik'],
                   ),
                   const SizedBox(height: 12),
                   _limitTcodeRow(
                     label: 'Pindah Buku (2300)',
                     minCtrl: notifier.limitMinPindahBukuCtrl,
                     maxCtrl: notifier.limitPindahBukuCtrl,
+                    errorText: notifier.manualErrors['limitPindah'],
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -928,6 +931,7 @@ class DataTellerPage extends StatelessWidget {
     required String label,
     required TextEditingController minCtrl,
     required TextEditingController maxCtrl,
+    String? errorText,
   }) {
     final rpStyle = const TextStyle(fontSize: 13, color: Colors.black54);
     final formatter = [CurrencyInputFormatter()];
@@ -963,7 +967,7 @@ class DataTellerPage extends StatelessWidget {
                 controller: maxCtrl,
                 keyboardType: TextInputType.number,
                 inputFormatters: formatter,
-                decoration: dec.copyWith(hintText: '0 = tanpa max'),
+                decoration: dec.copyWith(hintText: '0 = tanpa max', errorText: errorText),
               ),
             ]),
           ),

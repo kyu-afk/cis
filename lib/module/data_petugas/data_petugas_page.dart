@@ -391,13 +391,16 @@ class DataPetugasPage extends StatelessWidget {
                 _fieldNote('* No HP wajib diawali 08, hanya boleh angka, min 10 dan maks 14 digit'),
                 const SizedBox(height: 16),
 
-                // NIP (wajib untuk tambah)
-                if (isTambah) ...[
+                // NIP (tambah dan edit)
+                if (isFormMode) ...[
                   _fieldLabel('NIP'),
                   TextFormField(
                     controller: notifier.nipCtrl,
                     readOnly: isReadOnly,
-                    decoration: _inputDecoration('NIP').copyWith(
+                    decoration: _inputDecoration(
+                      'NIP',
+                      fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
+                    ).copyWith(
                       errorText: notifier.manualErrors['nip'],
                     ),
                     validator: null,
@@ -405,13 +408,16 @@ class DataPetugasPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Kode Petugas (wajib untuk tambah)
-                if (isTambah) ...[
+                // Kode Petugas (tambah dan edit)
+                if (isFormMode) ...[
                   _fieldLabel('Kode Petugas'),
                   TextFormField(
                     controller: notifier.kodePetugasCtrl,
                     readOnly: isReadOnly,
-                    decoration: _inputDecoration('Kode Petugas').copyWith(
+                    decoration: _inputDecoration(
+                      'Kode Petugas',
+                      fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
+                    ).copyWith(
                       errorText: notifier.manualErrors['kodePetugas'],
                     ),
                     validator: null,
@@ -443,7 +449,7 @@ class DataPetugasPage extends StatelessWidget {
                   Expanded(
                     flex: 1,
                     child: ElevatedButton(
-                      onPressed: (isReadOnly || isEdit) ? null : notifier.verifikasiNoSbb,
+                      onPressed: isReadOnly ? null : notifier.verifikasiNoSbb,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorPrimary,
                         foregroundColor: colortextwhite,
@@ -483,8 +489,8 @@ class DataPetugasPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Kantor (wajib untuk tambah)
-                if (isTambah) ...[
+                // Kantor (tambah dan edit)
+                if (isFormMode) ...[
                   _fieldLabel('Kantor'),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,8 +538,8 @@ class DataPetugasPage extends StatelessWidget {
                   _sectionHeader('Akses / Limit Transaksi'),
                   const SizedBox(height: 6),
                   const Text(
-                    'Sementara akses per-tcode di bawah belum tersambung ke backend '
-                    '(API baru belum dibuat) — checkbox & limit belum tersimpan ke server.',
+                    'Akses & limit per-tcode di bawah ini tersimpan langsung ke tabel '
+                    'cis_limit_petugas — tidak lewat middleware lama.',
                     style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(height: 12),
@@ -545,7 +551,7 @@ class DataPetugasPage extends StatelessWidget {
                         style: const TextStyle(fontSize: 12, color: Colors.red),
                       ),
                     ),
-                  if (notifier.isLoadingTcodeAkses && notifier.tcodeAksesList.isEmpty)
+                  if (notifier.isLoadingTcodeAkses)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: Center(child: CircularProgressIndicator(strokeWidth: 2)),

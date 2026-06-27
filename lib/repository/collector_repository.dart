@@ -15,6 +15,10 @@ class CollectorRepository {
   }
 
   static int _mapCode(dynamic response) {
+    if (response is Map) {
+      final status = (response['status'] ?? '').toString().toLowerCase();
+      if (status == 'success') return 1;
+    }
     final code = (response['code'] ?? '').toString();
     return code == '000' || code == '200' || code == '201' ? 1 : 0;
   }
@@ -91,6 +95,94 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     return {"value": 0, "message": "Terjadi kesalahan: $e", "noSbb": "", "namaSbb": ""};
   }
 }
+
+  /// Jalankan sync-repair: bandingkan backend vs cis_petugas, auto-link backend_id via nohp.
+  static Future<Map<String, dynamic>> syncRepairCollector({
+    String? bprId,
+    bool autoLink = true,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {
+        'bpr_id': bprId ?? session.bprId,
+        'page': 1,
+        'size': 5000,
+        'auto_link': autoLink,
+      };
+      final response = await dio.post(NetworkURL.syncRepairCollector(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+      return {
+        'value': _mapCode(decoded),
+        'message': _mapMessage(decoded),
+        'data': decoded['data'],
+      };
+    } catch (e) {
+      return {'value': 0, 'message': _dioErrorMessage(e), 'data': null};
+    }
+  }
+
+  /// Backfill cis_petugas untuk data legacy (butuh userid + password per item).
+  static Future<Map<String, dynamic>> syncBackfillCollector({
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final response = await dio.post(
+        NetworkURL.syncBackfillCollector(),
+        data: jsonEncode({'items': items}),
+      );
+      final decoded = _safeDecode(response.data);
+      return {
+        'value': _mapCode(decoded),
+        'message': _mapMessage(decoded),
+        'data': decoded['data'],
+      };
+    } catch (e) {
+      return {'value': 0, 'message': _dioErrorMessage(e), 'data': null};
+    }
+  }
+
+  // ==================== INQUIRY COLLECTOR ====================
+  static Future<Map<String, dynamic>> resolveUserIdCollector({
+    String? userId,
+    String? noHp,
+    String? backendId,
+    String? bprId,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = <String, dynamic>{
+        'bpr_id': bprId ?? session.bprId,
+      };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
+
+      if (kDebugMode) {
+        print('RESOLVE USERID COLLECTOR URL: ${NetworkURL.resolveUserIdCollector()}');
+        print('RESOLVE USERID COLLECTOR BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.resolveUserIdCollector(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+      if (kDebugMode) print('RESOLVE USERID COLLECTOR RESP: $decoded');
+
+      final rawData = decoded['data'];
+      final resolved = rawData is Map ? (rawData['userid'] ?? '').toString() : '';
+
+      return {
+        'value': _mapCode(decoded),
+        'message': _mapMessage(decoded),
+        'userid': resolved,
+      };
+    } catch (e) {
+      if (kDebugMode) print('ERROR RESOLVE USERID COLLECTOR: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e), 'userid': ''};
+    }
+  }
 
   // ==================== INQUIRY COLLECTOR ====================
   static Future<Map<String, dynamic>> inquiryCollector({
@@ -605,19 +697,24 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
 
   // ==================== RESET PASSWORD ====================
   static Future<Map<String, dynamic>> resetPasswordCollector({
-    required String userId,
+    String? userId,
+    String? noHp,
+    String? backendId,
     String? bprId,
   }) async {
     try {
       final dio     = await _dioWithToken();
       final session = await Pref().getUsers();
 
-      final body = {
-        "userid":    userId,
+      final body = <String, dynamic>{
         "userlogin": session.usersId,
         "term":      "WEB",
         "bpr_id":    bprId ?? session.bprId,
       };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
 
       if (kDebugMode) {
         print("RESET PASSWORD COLLECTOR URL : ${NetworkURL.resetPasswordCollector()}");
@@ -636,6 +733,94 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     } catch (e) {
       if (kDebugMode) print("ERROR RESET PASSWORD COLLECTOR: $e");
       return {"value": 0, "message": _dioErrorMessage(e)};
+    }
+  }
+
+  // ==================== LIMIT TRANSAKSI PER-TCODE (DINAMIS) ====================
+  // Pola sama persis dengan TellerRepository.getLimitTeller/saveLimitTeller.
+  static Future<Map<String, dynamic>> getLimitPetugas({
+    String? userId,
+    String? noHp,
+    String? backendId,
+    String? bprId,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+
+      final body = <String, dynamic>{
+        'bpr_id': bprId ?? session.bprId,
+      };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
+
+      if (kDebugMode) {
+        print('LIMIT INQUIRY PETUGAS URL : ${NetworkURL.limitInquiryCollector()}');
+        print('LIMIT INQUIRY PETUGAS BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.limitInquiryCollector(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+
+      if (kDebugMode) print('LIMIT INQUIRY PETUGAS RESP: $decoded');
+
+      final rawData = decoded['data'];
+      final limits = (rawData is Map ? rawData['limits'] : null) ?? [];
+      final resolvedUserId = rawData is Map ? (rawData['userid'] ?? '').toString() : '';
+
+      return {
+        'value': _mapCode(decoded),
+        'message': _mapMessage(decoded),
+        'limits': limits is List ? limits : [],
+        'userid': resolvedUserId,
+      };
+    } catch (e) {
+      if (kDebugMode) print('ERROR LIMIT INQUIRY PETUGAS: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e), 'limits': [], 'userid': ''};
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveLimitPetugas({
+    String? userId,
+    String? noHp,
+    String? backendId,
+    required List<Map<String, dynamic>> limits,
+    String? bprId,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+
+      final body = <String, dynamic>{
+        'bpr_id': bprId ?? session.bprId,
+        'userlogin': session.usersId,
+        'term': 'WEB',
+        'limits': limits,
+      };
+      if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
+      if (noHp != null && noHp.trim().isNotEmpty) body['nohp'] = noHp.trim();
+      final parsedBackendId = int.tryParse(backendId ?? '') ?? 0;
+      if (parsedBackendId > 0) body['backend_id'] = parsedBackendId;
+
+      if (kDebugMode) {
+        print('LIMIT SAVE PETUGAS URL : ${NetworkURL.limitSaveCollector()}');
+        print('LIMIT SAVE PETUGAS BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.limitSaveCollector(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+
+      if (kDebugMode) print('LIMIT SAVE PETUGAS RESP: $decoded');
+
+      return {
+        'value': _mapCode(decoded),
+        'message': _mapMessage(decoded),
+      };
+    } catch (e) {
+      if (kDebugMode) print('ERROR LIMIT SAVE PETUGAS: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e)};
     }
   }
 
