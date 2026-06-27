@@ -10,7 +10,8 @@ import 'package:cis_menu/module/mpin/cetak_mpin_page.dart';
 import 'package:cis_menu/module/mpin/generate_mpin_page.dart';
 import 'package:cis_menu/module/mpin/regenerate_mpin_page.dart';
 import 'package:cis_menu/module/mpin/reset_mpin_page.dart';
-import 'package:cis_menu/module/pengisi_modal/pengisi_modal_page.dart';
+import 'package:cis_menu/module/modal_kolektor/modal_kolektor_page.dart';
+import 'package:cis_menu/module/setup/sbb_perantara/sbb_perantara_page.dart';
 import 'package:cis_menu/module/laporan/laporan_data_petugas_page.dart';
 import 'package:cis_menu/module/laporan/laporan_data_teller_page.dart';
 import 'package:cis_menu/module/laporan/laporan_user_access_page.dart';
@@ -42,7 +43,8 @@ class MenuPage extends StatelessWidget {
     33: ResetMpinPage(),
     40: DataKartuPage(),
     41: UpdateStatusPage(),
-    50: PengisianModalPage(),
+    15: SbbPerantaraPage(),
+    50: ModalKolektorPage(),
     60: RekonTransaksiPage(),
     61: LaporanUserAccessPage(),
     62: LaporanDataTellerPage(),
@@ -62,6 +64,8 @@ class MenuPage extends StatelessWidget {
               menu: 'SETUP', submenu: 'LIMIT SETOR'),
           _MenuItem('Transaksi Collector', Icons.build, page: 14,
               menu: 'SETUP', submenu: 'TRANSAKSI COLLECTOR'),
+          _MenuItem('SBB Perantara', Icons.account_balance, page: 15,
+              menu: 'SETUP', submenu: 'SBB PERANTARA'),
         ]),
         const _MenuItem('DATA TELLER', Icons.account_box, page: 20,
             menu: 'DATA TELLER', submenu: 'DATA TELLER'),
@@ -84,8 +88,8 @@ class MenuPage extends StatelessWidget {
           _MenuItem('Teller', Icons.account_balance, page: 71,
               menu: 'BUKA & TUTUP TRANSAKSI', submenu: 'TELLER'),
         ]),
-        const _MenuItem('PENGISIAN MODAL', Icons.account_balance_wallet,
-            page: 50, menu: 'PENGISIAN MODAL', submenu: 'PENGISIAN MODAL'),
+        const _MenuItem('MODAL KOLEKTOR', Icons.account_balance_wallet,
+            page: 50, menu: 'MODAL KOLEKTOR', submenu: 'MODAL KOLEKTOR'),
         const _MenuItem('LAPORAN', Icons.history,
             menu: 'LAPORAN', children: [
           _MenuItem('User Access', Icons.manage_accounts, page: 61,

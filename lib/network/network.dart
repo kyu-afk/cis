@@ -111,6 +111,19 @@ class NetworkURL {
   // ---------- Transaksi Petugas  ----------
   static String inquiryTransaksi() => "$url_go3/cis/transaksi/inquiry";
 
+  // ---------- SBB Perantara ----------
+  static String inquirySbbPerantara() => "$url_go3/cis/sbb-perantara/inquiry";
+  static String addSbbPerantara()     => "$url_go3/cis/sbb-perantara/add";
+  static String editSbbPerantara()    => "$url_go3/cis/sbb-perantara/edit";
+  static String deleteSbbPerantara()  => "$url_go3/cis/sbb-perantara/delete";
+
+  // ---------- Modal Kolektor ----------
+  static String inquiryModalKolektor()    => "$url_go3/cis/modal-kolektor/inquiry";
+  static String getPendingModalKolektor() => "$url_go3/cis/modal-kolektor/get-pending";
+  static String addModalKolektor()        => "$url_go3/cis/modal-kolektor/add";
+  static String berikanModalKolektor()    => "$url_go3/cis/modal-kolektor/berikan";
+  static String deleteModalKolektor()     => "$url_go3/cis/modal-kolektor/delete";
+
   // ---------- Legacy CMS (tetap) ----------
   static String getUsersAccess() => "$url_go/user_search";
   static String getListKantorAccess() => "$url_go/kantor";
