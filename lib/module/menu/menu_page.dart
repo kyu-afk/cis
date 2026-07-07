@@ -4,6 +4,7 @@ import 'package:cis_menu/module/data_teller/data_teller_page.dart';
 import 'package:cis_menu/module/kantor/kantor_page.dart';
 import 'package:cis_menu/module/kelola_kartu/data_kartu_page.dart';
 import 'package:cis_menu/module/kelola_kartu/update_status_page.dart';
+import 'package:cis_menu/module/kelola_foto/kelola_foto_page.dart';
 import 'package:cis_menu/module/laporan/laporan_transaksi_petugas_page.dart'; // 🔥 TAMBAHKAN
 import 'package:cis_menu/module/menu/menu_notifier.dart';
 import 'package:cis_menu/module/mpin/cetak_mpin_page.dart';
@@ -52,6 +53,7 @@ class MenuPage extends StatelessWidget {
     64: LaporanTransaksiPetugasPage(), // 🔥 TAMBAHKAN
     70: BukaTutupPetugasPage(),
     71: BukaTutupTellerPage(),
+    80: KelolaFotoPage(),
   };
 
   List<_MenuItem> _menuItems(MenuNotifier n) => [
@@ -90,6 +92,8 @@ class MenuPage extends StatelessWidget {
         ]),
         const _MenuItem('MODAL KOLEKTOR', Icons.account_balance_wallet,
             page: 50, menu: 'MODAL KOLEKTOR', submenu: 'MODAL KOLEKTOR'),
+        const _MenuItem('KELOLA FOTO', Icons.photo_camera, page: 80,
+            menu: 'KELOLA FOTO', submenu: 'KELOLA FOTO'),
         const _MenuItem('LAPORAN', Icons.history,
             menu: 'LAPORAN', children: [
           _MenuItem('User Access', Icons.manage_accounts, page: 61,

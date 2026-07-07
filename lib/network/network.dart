@@ -132,4 +132,11 @@ class NetworkURL {
   static String deleteKantorCMS() => "$url_go/kantor";
   static String getListFasilitas() => "$url_go/master_menu";
   static String inquiryAccount() => "$url_go/inquiry_account";
+  static String accountSearch() => "$url_go/account_search";
+  static String nasabahPhotoBridge() => "$url_go/nasabah-photo-bridge";
+  static String uploadFotoCollme() => "$url_go/photo/upload-collme";
+
+  // ---------- Nasabah Foto (baru, terpisah dari nasabah-photo-bridge) ----------
+  static String nasabahFotoSave() => "$url_go3/cis/nasabah-foto/save";
+  static String nasabahFotoInquiry() => "$url_go3/cis/nasabah-foto/inquiry";
 }

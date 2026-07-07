@@ -64,24 +64,83 @@ class LoginPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // LOGO MEDFO
+                                // LOGO MEDFO dengan efek bubble
                                 Container(
-                                  height: 90,
+                                  height: 150,
                                   margin: const EdgeInsets.only(bottom: 20),
-                                  child: Image.asset(
-                                    ImageAssets.logo,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: colortextwhite.withOpacity(0.2),
-                                        child: const Icon(Icons.business, size: 50, color: colortextwhite),
-                                      );
-                                    },
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 145,
+                                      height: 145,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          // Bubble ring terluar (paling transparan)
+                                          Container(
+                                            width: 145,
+                                            height: 145,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: colortextwhite.withOpacity(0.07),
+                                            ),
+                                          ),
+                                          // Bubble ring tengah
+                                          Container(
+                                            width: 120,
+                                            height: 120,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: colortextwhite.withOpacity(0.14),
+                                              border: Border.all(
+                                                color: colortextwhite.withOpacity(0.25),
+                                                width: 1,
+                                              ),
+                                            ),
+                                          ),
+                                          // Bubble ring dalam
+                                          Container(
+                                            width: 98,
+                                            height: 98,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: colortextwhite.withOpacity(0.22),
+                                            ),
+                                          ),
+                                          // Logo utama dengan shadow melayang
+                                          Container(
+                                            width: 80,
+                                            height: 80,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withOpacity(0.2),
+                                                  blurRadius: 10,
+                                                  offset: const Offset(0, 4),
+                                                ),
+                                              ],
+                                            ),
+                                            child: ClipOval(
+                                              child: Image.asset(
+                                                ImageAssets.logo,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) {
+                                                  return Container(
+                                                    color: colortextwhite.withOpacity(0.2),
+                                                    child: const Icon(Icons.business, size: 36, color: colortextwhite),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 
                                 const Text(
-                                  "CMS",
+                                  "CIS",
                                   style: TextStyle(
                                     fontFamily: "Arial Black",
                                     fontSize: 36,
@@ -91,7 +150,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
-                                  "Customer Management System",
+                                  "Collme Information System",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 14,
@@ -100,7 +159,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  "ver. 1.0.6",
+                                  "ver. 1.1.0",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -109,7 +168,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "last update 27/6/26",
+                                  "last update 4/7/26",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -262,7 +321,7 @@ class LoginPage extends StatelessWidget {
                                     // Footer Copyright
                                     Center(
                                       child: Text(
-                                        "© 2026 CMS CIS",
+                                        "© 2026 CIS",
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade400,
