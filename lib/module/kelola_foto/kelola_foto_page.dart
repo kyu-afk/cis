@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../utils/colors.dart';
+import '../../utils/button_custom.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../../repository/kelola_foto_repository.dart';
 
@@ -16,9 +17,12 @@ import '../../repository/kelola_foto_repository.dart';
 /// List & pencarian terhubung ke API `account_search`. Baris tampil di
 /// tabel list kalau `foto_ktp_path` sudah terisi (foto_ttd_path boleh
 /// kosong) — lihat _KelolaFotoNotifier.loadData/_applyFilter.
-/// NOTE: field "No CIF" dipetakan dari `no_rek` karena response
-/// `account_search` belum menyediakan field cif terpisah — sesuaikan
-/// mapping ini kalau backend menambah field khusus untuk itu.
+/// NOTE (FIXED): `account_search` tidak mengembalikan field cif
+/// terpisah, jadi setiap baris hasil account_search di-resolve ULANG
+/// lewat `inquiryAccount(noRek)` (endpoint yang sama dipakai di flow
+/// "Cari No Rekening" pada Tambah Foto) untuk dapat `nocif` yang asli.
+/// `cif` TIDAK LAGI dipetakan dari `no_rek` — lihat
+/// _KelolaFotoNotifier._resolveCifFromNoRek.
 /// Slot foto kedua tadinya "Selfie", sekarang jadi "Foto KTP" —
 /// variabel internal (fotoSelfie/tambahSelfie/dst) masih pakai nama
 /// lama sementara, cuma label yang user lihat yang sudah diubah.
@@ -35,10 +39,12 @@ enum _TambahStage { pilihNasabah, signature, selfie, done }
 class _DummyNasabahFoto {
   final String nama;
   final String noRek;
-  // NOTE: response account_search belum punya field cif terpisah,
-  // sementara dipetakan dari no_rek. Sesuaikan kalau backend sudah
-  // menyediakan field khusus.
-  final String cif;
+  // NOTE (FIXED): account_search tidak punya field cif terpisah, jadi ini
+  // TIDAK LAGI diisi dari no_rek. Nilai asli didapat belakangan lewat
+  // inquiryAccount(noRek) — lihat _KelolaFotoNotifier._resolveCifFromNoRek.
+  // Sengaja non-final supaya bisa diisi ulang setelah resolve tanpa perlu
+  // rebuild seluruh objek.
+  String cif;
   final String noIdentitas;
   final String noHp;
   final String tglLahir;
@@ -84,7 +90,9 @@ class _DummyNasabahFoto {
     return _DummyNasabahFoto(
       nama: s(json['nama']).isNotEmpty ? s(json['nama']) : s(json['nama_rek']),
       noRek: s(json['no_rek']),
-      cif: s(json['no_rek']),
+      // Kosong dulu — diisi belakangan lewat _resolveCifFromNoRek setelah
+      // lookup ke inquiryAccount(noRek). BUKAN no_rek lagi (lihat NOTE di atas).
+      cif: '',
       noIdentitas: s(json['no_ktp']),
       noHp: s(json['no_hp']),
       tglLahir: _formatTglLahir(s(json['tgl_lahir'])),
@@ -334,6 +342,12 @@ class _KelolaFotoNotifier extends ChangeNotifier {
             .whereType<Map>()
             .map((e) => _DummyNasabahFoto.fromJson(Map<String, dynamic>.from(e))));
 
+      // Resolve CIF asli per baris lewat inquiryAccount(noRek) — account_search
+      // sendiri tidak punya field cif terpisah (lihat NOTE di _DummyNasabahFoto).
+      // Dilakukan SEBELUM _applyFilter supaya pencarian by-CIF & tabel yang
+      // ditampilkan sudah pakai nilai yang benar, bukan no_rek.
+      await _resolveCifFromNoRek();
+
       // NOTE: pengecekan foto_ktp_path lewat nasabah-photo-bridge per baris
       // (dulu di sini) sudah DIMATIKAN — tabel ini sekarang menampilkan
       // semua hasil account_search apa adanya, tidak lagi disaring
@@ -358,6 +372,51 @@ class _KelolaFotoNotifier extends ChangeNotifier {
     // dan akan notify sekali di akhir, setelah _mergeNasabahFoto juga
     // selesai — supaya tabel tidak sempat kelihatan render 5 data duluan
     // sebelum nambah jadi 7.
+  }
+
+  // ---------- Resolve CIF asli dari no_rek ----------
+  // account_search TIDAK mengembalikan field cif terpisah, jadi tiap baris
+  // di-lookup ulang ke inquiryAccount(noRek) — endpoint yang sama dipakai di
+  // flow "Cari No Rekening" pada Tambah Foto (lihat searchNasabah) — untuk
+  // dapat `nocif` yang asli. Hasilnya ditulis ke d.cif (bukan lagi diisi
+  // dari no_rek).
+  //
+  // Dijalankan dengan concurrency dibatasi (_kResolveCifBatchSize baris
+  // sekaligus), BUKAN Future.wait semua baris sekaligus — inquiryAccount
+  // memanggil core banking (trx_code 0200) per baris, jadi menembak semua
+  // baris berbarengan berisiko membebani gateway core banking kalau
+  // datanya banyak.
+  //
+  // Kalau lookup gagal atau nocif kosong untuk suatu baris, cif dibiarkan
+  // kosong ('') — BUKAN fallback ke no_rek — supaya tidak lagi salah
+  // tampil seolah no_rek adalah CIF. Baris begini akan tampil '-' di
+  // kolom No CIF (lihat _buildRows).
+  static const int _kResolveCifBatchSize = 5;
+
+  Future<void> _resolveCifFromNoRek() async {
+    final targets = _list.where((d) => d.noRek.isNotEmpty).toList();
+    if (targets.isEmpty) return;
+
+    for (var i = 0; i < targets.length; i += _kResolveCifBatchSize) {
+      final batch = targets.skip(i).take(_kResolveCifBatchSize);
+      await Future.wait(batch.map((d) async {
+        try {
+          final result =
+              await KelolaFotoRepository.inquiryAccount(noRek: d.noRek);
+          if (result['value'] == 1) {
+            final data = result['data'] as Map<String, dynamic>?;
+            d.cif = (data?['nocif'] ?? '').toString();
+          } else {
+            d.cif = '';
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('ERROR RESOLVE CIF (no_rek=${d.noRek}): $e');
+          }
+          d.cif = '';
+        }
+      }));
+    }
   }
 
   void _applyFilter() {
@@ -466,8 +525,20 @@ class _KelolaFotoNotifier extends ChangeNotifier {
     ubahSignatureChanged = false;
     ubahSelfieChanged = false;
     simpanUbahError = null;
-    isLoadingUbahFoto = true;
+    isLoadingUbahFoto = false;
     viewMode = _ViewMode.form;
+
+    // CIF gagal di-resolve dari no_rek (lihat _resolveCifFromNoRek) — jangan
+    // lanjut panggil inquiryNasabahPhoto dengan no_cif kosong, itu bisa balik
+    // data nasabah yang salah/tidak relevan.
+    if (d.cif.isEmpty) {
+      ubahFotoError =
+          'CIF nasabah ini belum berhasil ditemukan. Coba muat ulang halaman.';
+      notifyListeners();
+      return;
+    }
+
+    isLoadingUbahFoto = true;
     notifyListeners();
 
     // Ambil path foto tanda tangan & KTP yang sudah tersimpan di server
@@ -1051,6 +1122,7 @@ class _KelolaFotoListView extends StatelessWidget {
     }
     return AppDataGrid(
       margin: EdgeInsets.zero,
+      pageSize: 7,
       columns: _buildColumns(),
       rows: _buildRows(notifier),
       onActionTap: (row) {
@@ -1115,7 +1187,7 @@ class _KelolaFotoListView extends StatelessWidget {
       return {
         '__index__': i,
         'nama': d.nama,
-        'cif': d.cif,
+        'cif': d.cif.isNotEmpty ? d.cif : '-',
         'noIdentitas': d.noIdentitas.isNotEmpty ? d.noIdentitas : '-',
         'noHp': d.noHp.isNotEmpty ? d.noHp : '-',
         'tglLahir': d.tglLahir,
@@ -1274,24 +1346,68 @@ class _KelolaFotoFormView extends StatelessWidget {
     if (!context.mounted) return;
 
     if (sudahAda) {
-      final keUbah = await showDialog<bool>(
+      // Dipakai showModalBottomSheet + styling manual (bukan AlertDialog
+      // bawaan) supaya modelnya sama kayak popup lain di app — lihat
+      // CustomDialog di utils/dialog_custom.dart (rounded 16, header
+      // ikon+judul, tombol ButtonPrimary/ButtonPrimaryNoRounded).
+      final keUbah = await showModalBottomSheet<bool>(
+        backgroundColor: Colors.transparent,
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Foto Sudah Ada'),
-          content: const Text(
-            'Akun ini sudah memiliki foto, gunakan fitur ubah untuk menambah/mengubah foto. Apa anda ingin ke fitur ubah?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Tidak'),
+        builder: (ctx) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: colortextwhite,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Color(0xFF8B5CF6), size: 24),
+                      SizedBox(width: 12),
+                      Text(
+                        'Foto Sudah Ada',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF8B5CF6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Akun ini sudah memiliki foto, gunakan fitur ubah untuk menambah/mengubah foto. Apa anda ingin ke fitur ubah?',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ButtonPrimaryNoRounded(
+                          onTap: () => Navigator.of(ctx).pop(false),
+                          name: 'Tidak',
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ButtonPrimary(
+                          onTap: () => Navigator.of(ctx).pop(true),
+                          name: 'Ya',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Ya'),
-            ),
-          ],
-        ),
+          );
+        },
       );
 
       if (keUbah == true) {
