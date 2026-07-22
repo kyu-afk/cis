@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cis_menu/network/network.dart';
+import 'package:cis_menu/pref/pref.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -44,15 +46,23 @@ class IdleLogoutService {
     _onLogout = onLogout;
     _resetTimer();
 
-    // Web: pasang listener beforeunload + visibilitychange.
     if (kIsWeb) {
-      platform.registerBeforeUnload(_triggerLogout);
+      _registerWebUnloadHandlers();
     }
 
     if (kDebugMode) {
       print('[IdleLogout] Service started — '
           'idle: $kIdleTimeout, background: $kBackgroundTimeout');
     }
+  }
+
+  static Future<void> _registerWebUnloadHandlers() async {
+    final token = await Pref().getToken();
+    platform.registerBeforeUnload(
+      _triggerLogout,
+      logoutUrl: NetworkURL.logout(),
+      authToken: token,
+    );
   }
 
   /// Stop semua timer dan hapus listener.

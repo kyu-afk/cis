@@ -193,13 +193,18 @@ class AuthRepository {
   // Web service logout: POST /logout dengan Authorization: Bearer <token>
   // Tidak memerlukan body.
 
+  /// [bearerToken] — opsional; dipakai saat token sudah dihapus dari Pref
+  /// (mis. auto-logout) supaya request logout tetap terautentikasi.
   static Future<dynamic> logOut(
     String url,
     String bprId,
     String userlogin,
-    String userid,
-  ) async {
-    final dio = await _dioAuth();
+    String userid, {
+    String? bearerToken,
+  }) async {
+    final dio = bearerToken != null && bearerToken.isNotEmpty
+        ? _dioWithToken(bearerToken)
+        : await _dioAuth();
 
     if (kDebugMode) {
       print("ENDPOINT URL LOGOUT : $url");
@@ -229,6 +234,17 @@ class AuthRepository {
         "raw":     {},
       };
     }
+  }
+
+  /// Dio one-off dengan Bearer token eksplisit (tanpa baca Pref).
+  static Dio _dioWithToken(String token) {
+    final dio = Dio();
+    dio.options.headers = {
+      'X-API-Key': apiKeymiddlewarecis,
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+    return dio;
   }
 
   // ==================== FORCE LOGOUT ====================

@@ -105,6 +105,7 @@ class UsersAccessNotifier extends ChangeNotifier {
     final currentUserId = selectedUser?.userid?.toUpperCase() ?? '';
     UsersAccessModel? duplicate;
     for (final u in _list) {
+      if (UsersAccessStsrec.code(u) == 'C') continue;
       final uid = (u.hrmEmployeeId ?? '').trim();
       if (uid.isNotEmpty && uid == emp.id && u.userid?.toUpperCase() != currentUserId) {
         duplicate = u;
@@ -335,7 +336,12 @@ class UsersAccessNotifier extends ChangeNotifier {
         final data = result['data'] as List<dynamic>? ?? [];
         final allUsers = data.map((e) => UsersAccessModel.fromJson(e)).toList();
 
-        final visibleUsers = allUsers
+        // User yang sudah ditutup (stsaktif/stsrec = C) tidak ditampilkan di menu.
+        final activeUsers = allUsers
+            .where((u) => UsersAccessStsrec.code(u) != 'C')
+            .toList();
+
+        final visibleUsers = activeUsers
             .where((u) => !((u.kdkantor ?? '') == '000' && (u.lvluser ?? 1) != 1))
             .toList();
 
@@ -781,7 +787,9 @@ class UsersAccessNotifier extends ChangeNotifier {
       return 'User ID harus mengandung huruf dan angka (contoh: johndoe123)';
     }
     
-    if (_list.any((u) => u.userid?.toUpperCase() == value.toUpperCase())) {
+    if (_list.any((u) =>
+        UsersAccessStsrec.code(u) != 'C' &&
+        u.userid?.toUpperCase() == value.toUpperCase())) {
       return 'User ID sudah terdaftar';
     }
     return null;
@@ -829,7 +837,10 @@ class UsersAccessNotifier extends ChangeNotifier {
       return 'User ID harus mengandung huruf dan angka (contoh: johndoe123)';
     }
     
-    if (drawerMode == 'tambah' && _list.any((u) => u.userid?.toUpperCase() == text.toUpperCase())) {
+    if (drawerMode == 'tambah' &&
+        _list.any((u) =>
+            UsersAccessStsrec.code(u) != 'C' &&
+            u.userid?.toUpperCase() == text.toUpperCase())) {
       return 'User ID sudah terdaftar';
     }
     return null;

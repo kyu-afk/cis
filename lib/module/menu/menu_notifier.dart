@@ -9,6 +9,8 @@ import 'package:cis_menu/pref/pref.dart';
 import 'package:cis_menu/utils/dialog_custom.dart';
 import 'package:cis_menu/utils/dialog_loading.dart';
 import 'package:cis_menu/utils/idle_logout_service.dart';
+import 'package:cis_menu/utils/idle_logout_service_web.dart'
+    if (dart.library.io) 'package:cis_menu/utils/idle_logout_service_stub.dart' as platform;
 import 'package:cis_menu/network/api_client.dart';
 import 'package:cis_menu/utils/informationdialog.dart';
 import 'package:cis_menu/utils/url.dart';
@@ -99,45 +101,46 @@ class MenuNotifier extends ChangeNotifier {
   /// Dipanggil oleh IdleLogoutService saat timeout, tab di-close, atau
   /// tab terlalu lama di background.
   ///
-  /// PATCH: urutan dibalik jadi clear local prefs DULU, baru hit API logout.
-  /// Sebelumnya API logout di-await duluan — pada skenario tab di-close,
-  /// browser cuma kasih waktu sangat singkat ke event beforeunload/pagehide
-  /// untuk beres, jadi kalau request API (network round-trip) belum selesai,
-  /// baris `await Pref().hapus()` di baliknya TIDAK PERNAH jalan karena tab
-  /// keburu ditutup duluan. Akibatnya localStorage masih ada data sesi lama,
-  /// dan pas tab dibuka/refresh lagi, LoginNotifier.getProfile() mengira user
-  /// masih login lalu diam-diam redirect ke MenuPage tanpa update address
-  /// bar (karena pakai Navigator.pushAndRemoveUntil biasa, bukan named route)
-  /// — makanya URL kelihatan di /login tapi isinya masih menu.
+  /// Auto-logout (idle timeout, tab close, tab background terlalu lama).
   ///
-  /// Clear local prefs duluan (cepat, murni local storage) memastikan sesi
-  /// lokal selalu bersih walau proses selanjutnya (hit API / redirect)
-  /// keburu terpotong karena tab ditutup.
+  /// Urutan:
+  ///   1. Simpan token dulu — endpoint logout butuh Bearer token.
+  ///   2. Hit API logout (best-effort; di web tab-close pakai fetch keepalive).
+  ///   3. Clear sesi lokal.
+  ///   4. Redirect ke login.
+  ///
+  /// BUG sebelumnya: Pref().hapus() dipanggil sebelum API logout sehingga token
+  /// sudah terhapus saat request dikirim → backend menolak (401) → stslogin
+  /// tetap 'Y' di database.
   Future<void> _autoLogout() async {
     if (kDebugMode) print("[MenuNotifier] Auto-logout dipicu");
 
     final logoutUsers = users;
+    final savedToken = await Pref().getToken();
+    final logoutUrl = NetworkURL.logout();
 
-    // 1. Clear sesi lokal DULUAN — ini yang paling kritis dan harus selesai
-    // walau tab keburu ditutup.
-    await Pref().hapus();
+    // Web tab-close: kirim logout keepalive secara sinkron (fetch keepalive)
+    // sebelum async Dart sempat terpotong browser.
+    if (kIsWeb && savedToken.isNotEmpty) {
+      platform.fireLogoutKeepalive(logoutUrl, savedToken);
+    }
 
-    // 2. Hit API logout supaya session di server ikut ter-terminate.
-    // Best-effort: tidak menghalangi apa pun kalau gagal/timeout/terpotong
-    // karena tab ditutup — sesi lokal sudah aman dibersihkan di langkah 1.
-    if (!TemplateConfig.skipLogin && logoutUsers != null) {
+    // Hit API logout selagi token masih valid.
+    if (!TemplateConfig.skipLogin && logoutUsers != null && savedToken.isNotEmpty) {
       try {
         await AuthRepository.logOut(
-          NetworkURL.logout(),
+          logoutUrl,
           logoutUsers.bprId,
           logoutUsers.usersId,
           logoutUsers.usersId,
+          bearerToken: savedToken,
         );
       } catch (e) {
-        // Abaikan error jaringan — sesi lokal sudah terlanjur bersih.
         if (kDebugMode) print("[MenuNotifier] _autoLogout API error (ignored): $e");
       }
     }
+
+    await Pref().hapus();
 
     final nav = ApiClient.navigatorKey.currentState;
     nav?.pushNamedAndRemoveUntil("/login", (route) => false);
@@ -241,6 +244,7 @@ class MenuNotifier extends ChangeNotifier {
   }
 
   remove() async {
+    IdleLogoutService.stop();
     CustomDialog.loading(context);
 
     try {
