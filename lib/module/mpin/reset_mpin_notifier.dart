@@ -73,7 +73,7 @@ class ResetMpinNotifier extends ChangeNotifier {
     if (_collectorId.isEmpty || _noSbb.isEmpty || _kdKantor.isEmpty) {
       _showInfoDialog(
         title: 'Peringatan',
-        message: 'Data petugas belum lengkap',
+        message: 'Data kolektor belum lengkap',
         isSuccess: false,
       );
       return;
@@ -100,7 +100,7 @@ class ResetMpinNotifier extends ChangeNotifier {
       excludedCollectorIds.add(_collectorId);
       _showResultDialog(
         isSuccess: true,
-        message: 'MPIN berhasil direset! Petugas $_namaPetugas sekarang dapat login dengan MPIN default.',
+        message: 'MPIN berhasil direset! Kolektor $_namaPetugas sekarang dapat login dengan MPIN default.',
       );
     } else {
       _showResultDialog(
@@ -132,7 +132,7 @@ class ResetMpinNotifier extends ChangeNotifier {
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 16),
-              const Text('Apakah Anda yakin ingin mereset MPIN petugas ini ke default?',
+              const Text('Apakah Anda yakin ingin mereset MPIN kolektor ini ke default?',
                   style: TextStyle(fontSize: 14)),
               const SizedBox(height: 8),
               Container(

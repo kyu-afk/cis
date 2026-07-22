@@ -113,9 +113,9 @@ class KantorPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns() => [
         const AppGridColumn('no', 'No', width: 60, align: Alignment.center),
-        const AppGridColumn('kd_bank', 'Kode Bank', width: 280, align: Alignment.center),
-        const AppGridColumn('kd_kantor', 'Kode Kantor', width: 280, align: Alignment.center),
-        const AppGridColumn('nama_kantor', 'Nama Kantor', width: 520),
+        const AppGridColumn('kd_bank', 'Kode Bank', width: 320, align: Alignment.center),
+        const AppGridColumn('kd_kantor', 'Kode Kantor', width: 320, align: Alignment.center),
+        const AppGridColumn('nama_kantor', 'Nama Kantor', width: 550),
       ];
 
   List<Map<String, dynamic>> _buildRows(KantorNotifier notifier) {

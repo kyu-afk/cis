@@ -25,6 +25,7 @@ class DataTellerModel {
   String? namaKantor;
   String? status;
   String? batch;
+  String? hrmEmployeeId;
   bool? isTransaksiDibuka;
   bool? transaksiTeller;
 
@@ -40,6 +41,7 @@ class DataTellerModel {
     this.namaKantor,
     this.status,
     this.batch,
+    this.hrmEmployeeId,
     this.isTransaksiDibuka,
     this.transaksiTeller,
   });
@@ -64,6 +66,7 @@ class DataTellerModel {
       namaKantor: json['nama_kantor']?.toString(),
       status: json['status']?.toString(),
       batch: json['batch']?.toString(),
+      hrmEmployeeId: json['hrm_employee_id']?.toString(),
       isTransaksiDibuka: json['transaksi_teller'] == true,
       transaksiTeller: json['transaksi_teller'] == true,
     );
@@ -129,6 +132,7 @@ class DataTellerNotifier extends ChangeNotifier {
   bool obscure = true;
   bool isLoadingVerifikasi = false;
   bool isChangePassword = false;
+  bool isUpdatingKantor = false;
   
   // Flag untuk mencegah listener mereset saat verifikasi atau mengisi form
   bool _isInternalChange = false;
@@ -152,6 +156,180 @@ class DataTellerNotifier extends ChangeNotifier {
 
   DataTellerModel? selectedTeller;
   KantorDummy? selectedKantor;
+
+  // ==================== HRM EMPLOYEE TYPEAHEAD ====================
+  // Sama seperti users_access: relasi teller -> karyawan HRIS wajib via inquiry,
+  // kantor ikut terkunci mengikuti kantor karyawan tersebut di HRIS.
+  HrmEmployeeModel? selectedHrmEmployee;
+  final TextEditingController hrmSearchController = TextEditingController();
+
+  bool get hrmEmployeeSelected => drawerMode == 'tambah' && selectedHrmEmployee != null;
+
+  bool get hrmOfficeFixed =>
+      selectedHrmEmployee?.office != null &&
+      (selectedHrmEmployee!.office!.branchCode?.isNotEmpty ?? false);
+
+  Future<List<HrmEmployeeModel>> searchHrmEmployee(String search) async {
+    if (search.trim().length < 2 || bprId.isEmpty) return [];
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: bprId,
+        search: search.trim(),
+      );
+      return results.map((e) => HrmEmployeeModel.fromJson(e)).toList();
+    } catch (e) {
+      if (kDebugMode) print('ERROR searchHrmEmployee (teller): $e');
+      return [];
+    }
+  }
+
+  void selectHrmEmployee(HrmEmployeeModel emp) {
+    selectedHrmEmployee = emp;
+    hrmSearchController.text = emp.name;
+    namaTellerCtrl.text = emp.name;
+    _applyHrmOffice(emp);
+    notifyListeners();
+  }
+
+  void _applyHrmOffice(HrmEmployeeModel emp) {
+    if (emp.office == null || (emp.office!.branchCode?.isEmpty ?? true)) return;
+    final officeCode = emp.office!.branchCode!;
+    final matched = _listKantor.where((k) => k.kdKantor == officeCode).firstOrNull ??
+        KantorDummy(officeCode, emp.office!.name ?? officeCode, bprId);
+    selectedKantor = matched;
+    if (_manualErrors.containsKey('kantor')) _manualErrors.remove('kantor');
+  }
+
+  void clearHrmEmployee() {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+    notifyListeners();
+  }
+
+  Future<void> _loadHrmEmployeeForEdit(DataTellerModel t) async {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+
+    final empId = t.hrmEmployeeId;
+    final name = (t.namaTeller ?? '').trim();
+    if (empId == null || empId.isEmpty || name.isEmpty) return;
+
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(bprId: bprId, search: name);
+      for (final raw in results) {
+        final emp = HrmEmployeeModel.fromJson(raw);
+        if (emp.id == empId) {
+          selectedHrmEmployee = emp;
+          hrmSearchController.text = emp.name;
+          break;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('_loadHrmEmployeeForEdit (teller): $e');
+    }
+    notifyListeners();
+  }
+
+  /// Perbarui kantor di form edit dari data HRIS karyawan yang terhubung.
+  Future<void> updateKantorFromHris() async {
+    if (drawerMode != 'edit' || selectedTeller == null) return;
+    final empId = selectedHrmEmployee?.id ?? selectedTeller!.hrmEmployeeId;
+    if (empId == null || empId.isEmpty) {
+      _showErrorDialog('Teller ini belum terhubung ke data karyawan HRIS');
+      return;
+    }
+    final name = (selectedTeller!.namaTeller ?? namaTellerCtrl.text).trim();
+    if (name.isEmpty) {
+      _showErrorDialog('Nama teller tidak ditemukan');
+      return;
+    }
+    isUpdatingKantor = true;
+    notifyListeners();
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: bprId,
+        search: name,
+      );
+      HrmEmployeeModel? emp;
+      for (final raw in results) {
+        final e = HrmEmployeeModel.fromJson(raw);
+        if (e.id == empId) {
+          emp = e;
+          break;
+        }
+      }
+      if (emp?.office?.branchCode == null || emp!.office!.branchCode!.isEmpty) {
+        _showErrorDialog('Data kantor karyawan tidak ditemukan di HRIS');
+        return;
+      }
+      selectedHrmEmployee = emp;
+      _applyHrmOffice(emp);
+      _showSuccessDialog('Kantor berhasil diperbarui dari HRIS');
+    } catch (e) {
+      _showErrorDialog('Error: $e');
+    } finally {
+      isUpdatingKantor = false;
+      notifyListeners();
+    }
+  }
+
+  /// Aksi "Perbarui Kode Kantor dari HRIS" — re-fetch kantor terbaru karyawan
+  /// yang terhubung, lalu update kd_kantor teller ini (field lain tidak berubah).
+  Future<void> perbaruiKantorDariHris(DataTellerModel t) async {
+    final empId = t.hrmEmployeeId;
+    if (empId == null || empId.isEmpty) {
+      _showErrorDialog('Teller ini belum terhubung ke data karyawan HRIS');
+      return;
+    }
+    isSaving = true;
+    notifyListeners();
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: bprId,
+        search: (t.namaTeller ?? '').trim(),
+      );
+      HrmEmployeeModel? emp;
+      for (final raw in results) {
+        final e = HrmEmployeeModel.fromJson(raw);
+        if (e.id == empId) {
+          emp = e;
+          break;
+        }
+      }
+      if (emp?.office?.branchCode == null || emp!.office!.branchCode!.isEmpty) {
+        isSaving = false;
+        notifyListeners();
+        _showErrorDialog('Data kantor karyawan tidak ditemukan di HRIS');
+        return;
+      }
+      final newKdKantor = emp.office!.branchCode!;
+      final result = await TellerRepository.updateTeller(
+        id: t.id ?? '',
+        nama: t.namaTeller ?? '',
+        noHp: '',
+        nip: '',
+        kdKantor: newKdKantor,
+        sbbTeller: t.noSbb ?? '',
+        namaSbb: t.namasbb ?? '',
+        tanggalExpired: t.tglKadaluarsa ?? '',
+        batch: t.batch ?? '',
+        bprId: bprId,
+        hrmEmployeeId: empId,
+      );
+      isSaving = false;
+      notifyListeners();
+      if (result['value'] == 1) {
+        await _loadData();
+        _showSuccessDialog('Kode kantor berhasil diperbarui dari HRIS');
+      } else {
+        _showErrorDialog(result['message']?.toString() ?? 'Gagal memperbarui kode kantor');
+      }
+    } catch (e) {
+      isSaving = false;
+      notifyListeners();
+      _showErrorDialog('Error: $e');
+    }
+  }
 
   String bprId = '';
   String userLogin = '';
@@ -887,6 +1065,8 @@ class DataTellerNotifier extends ChangeNotifier {
   void resetForm() {
     selectedTeller = null;
     selectedKantor = null;
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
     _selectedFasilitas.clear();
     _manualErrors.clear();
     
@@ -950,6 +1130,7 @@ class DataTellerNotifier extends ChangeNotifier {
       orElse: () => _listKantor.isNotEmpty ? _listKantor.first : KantorDummy('', '', ''),
     );
     _selectedFasilitas.clear();
+    unawaited(_loadHrmEmployeeForEdit(teller));
 
     _isInternalChange = false;
     notifyListeners();
@@ -1685,6 +1866,7 @@ class DataTellerNotifier extends ChangeNotifier {
               : tglCtrl.text.trim(),
           batch: batchCtrl.text.trim(),
           bprId: bprId,
+          hrmEmployeeId: selectedHrmEmployee?.id,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();
@@ -1705,6 +1887,7 @@ class DataTellerNotifier extends ChangeNotifier {
           password: isChangePassword ? passwordCtrl.text.trim() : null,
           batch: batchCtrl.text.trim(),
           bprId: bprId,
+          hrmEmployeeId: selectedHrmEmployee?.id ?? selectedTeller?.hrmEmployeeId,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();
@@ -1911,6 +2094,7 @@ class DataTellerNotifier extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     scrollController.dispose();
+    hrmSearchController.dispose();
     noSbbCtrl.removeListener(_onNoSbbChanged);
     noSbbCtrl.dispose();
     userIdCtrl.dispose();

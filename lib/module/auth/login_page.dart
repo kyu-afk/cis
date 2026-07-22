@@ -159,7 +159,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  "ver. 1.1.1",
+                                  "ver. 1.2.0",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/index.dart';
 import '../../utils/colors.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import 'data_petugas_notifier.dart';
@@ -46,7 +49,7 @@ class DataPetugasPage extends StatelessWidget {
       color: colorPrimary,
       child: Row(
         children: [
-          const Text('Data Petugas',
+          const Text('Data Kolektor',
               style: TextStyle(color: colortextwhite, fontSize: 24, fontWeight: FontWeight.w700)),
           const Spacer(),
           ElevatedButton.icon(
@@ -58,7 +61,7 @@ class DataPetugasPage extends StatelessWidget {
             ),
             onPressed: notifier.tambahPetugas,
             icon: const Icon(Icons.add),
-            label: const Text('Tambah Data Petugas', style: TextStyle(fontWeight: FontWeight.w600)),
+            label: const Text('Tambah Data Kolektor', style: TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -89,7 +92,7 @@ class DataPetugasPage extends StatelessWidget {
                   controller: notifier.searchCtrl,
                   onChanged: notifier.onSearchChanged,
                   decoration: InputDecoration(
-                    hintText: 'Cari Nama atau NIP',
+                    hintText: 'Cari Nama',
                     hintStyle: const TextStyle(fontSize: 12),
                     prefixIcon: const Icon(Icons.search, size: 18),
                     isDense: true,
@@ -122,10 +125,9 @@ class DataPetugasPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns(DataPetugasNotifier notifier) => [
     const AppGridColumn('no', 'No', width: 70, align: Alignment.center),
-    const AppGridColumn('nama', 'Nama', width: 260),
-    const AppGridColumn('noHp', 'No HP', width: 220),
-    const AppGridColumn('nip', 'NIP', width: 220),
-    const AppGridColumn('kantor', 'Kantor', width: 220),
+    const AppGridColumn('nama', 'Nama', width: 320),
+    const AppGridColumn('noHp', 'No HP', width: 300),
+    const AppGridColumn('kantor', 'Kantor', width: 300),
     AppGridColumn('status', 'Status', width: 150, align: Alignment.center, cellBuilder: (value) => _statusBadge(value)),
     AppGridColumn(
       'aksi',
@@ -135,9 +137,9 @@ class DataPetugasPage extends StatelessWidget {
       isAction: true,
       cellBuilder: (_) => const Icon(Icons.edit_note, size: 30, color: Colors.grey),
       onActionTap: (rowData) {
-        final nip = rowData['nip']?.toString();
+        final id = rowData['id'];
         final petugas = notifier.filteredList.firstWhere(
-          (p) => p.nip == nip,
+          (p) => p.id == id,
           orElse: () => DataPetugasModel(),
         );
         if (petugas.id != null) {
@@ -192,7 +194,7 @@ class DataPetugasPage extends StatelessWidget {
 
   Widget _buildActionMenu(DataPetugasNotifier notifier, BuildContext context) {
     if (notifier.selectedPetugas == null) {
-      return const Center(child: Text('Pilih data petugas terlebih dahulu'));
+      return const Center(child: Text('Pilih data kolektor terlebih dahulu'));
     }
 
     final isAktif = DataPetugasStsrec.isAktif(notifier.selectedPetugas);
@@ -219,13 +221,11 @@ class DataPetugasPage extends StatelessWidget {
                     Text(notifier.selectedPetugas!.userId ?? '-', style: const TextStyle(fontSize: 13)),
                     Text(notifier.selectedPetugas!.nama ?? '-', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text('NIP: ${notifier.selectedPetugas!.nip ?? '-'}', style: const TextStyle(fontSize: 13)),
-                    const SizedBox(height: 4),
                     Text('No HP: ${notifier.selectedPetugas!.noHp ?? '-'}', style: const TextStyle(fontSize: 13)),
                     const SizedBox(height: 4),
                     Text('Kantor: ${notifier.getNamaKantor(notifier.selectedPetugas?.kdKantor)}', style: const TextStyle(fontSize: 13)),
                     const SizedBox(height: 4),
-                    Text('Kode Petugas: ${notifier.selectedPetugas!.kodePetugas ?? '-'}', style: const TextStyle(fontSize: 13)),
+                    Text('Kode Kolektor: ${notifier.selectedPetugas!.kodePetugas ?? '-'}', style: const TextStyle(fontSize: 13)),
                     const SizedBox(height: 8),
                     _statusBadge(DataPetugasStsrec.statusFor(notifier.selectedPetugas)),
                   ],
@@ -236,6 +236,12 @@ class DataPetugasPage extends StatelessWidget {
               const SizedBox(height: 12),
               if (isAktif) ...[
                 _actionTile(Icons.edit, 'Edit', colorPrimary, () => notifier.pilihAksi('edit')),
+                if ((notifier.selectedPetugas?.hrmEmployeeId ?? '').isNotEmpty)
+                  _actionTile(Icons.sync, 'Perbarui Kode Kantor dari HRIS', Colors.teal, () {
+                    final petugas = notifier.selectedPetugas!;
+                    notifier.closeDrawer();
+                    notifier.perbaruiKantorDariHris(petugas);
+                  }),
                 _actionTile(Icons.lock_reset, 'Reset Password', Colors.blue, () => notifier.pilihAksi('resetPassword')),
                 _actionTile(Icons.block, 'Blokir', Colors.orange, () => notifier.pilihAksi('blokir')),
                 _actionTile(Icons.delete, 'Hapus', Colors.red, () => notifier.pilihAksi('hapus')),
@@ -318,9 +324,189 @@ class DataPetugasPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
+                // ── Relasi Karyawan HRIS (TypeAhead) - HANYA UNTUK TAMBAH ──
+                if (isTambah) ...[
+                  const Text('Relasi Karyawan HRIS *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  TypeAheadField<HrmEmployeeModel>(
+                    controller: notifier.hrmSearchController,
+                    debounceDuration: const Duration(milliseconds: 400),
+                    suggestionsCallback: (search) => notifier.searchHrmEmployee(search),
+                    itemBuilder: (context, emp) => ListTile(
+                      dense: true,
+                      title: Text(emp.name, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                        [if (emp.nik != null) 'NIK: ${emp.nik}', if (emp.department != null) emp.department!].join(' | '),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                    onSelected: (emp) => notifier.selectHrmEmployee(emp),
+                    emptyBuilder: (_) => const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Ketik minimal 2 karakter untuk mencari karyawan',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ),
+                    builder: (context, controller, focusNode) => TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: notifier.selectedHrmEmployee != null 
+                            ? notifier.selectedHrmEmployee!.name 
+                            : 'WAJIB: Cari karyawan HRIS terlebih dahulu',
+                        prefixIcon: const Icon(Icons.search),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: notifier.selectedHrmEmployee != null
+                            ? const Icon(Icons.check_circle, size: 18, color: Color(0xff2E7D32))
+                            : const Icon(Icons.warning, size: 18, color: Colors.orange),
+                      ),
+                    ),
+                  ),
+                  if (notifier.manualErrors['hrmEmployee'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        notifier.manualErrors['hrmEmployee']!,
+                        style: const TextStyle(fontSize: 12, color: Colors.red),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Nama - READONLY saat EDIT, bisa diisi dari HRIS saat TAMBAH
+                _fieldLabel('Nama Kolektor *'),
+                TextFormField(
+                  controller: notifier.namaCtrl,
+                  readOnly: isEdit || (isTambah && notifier.hrmEmployeeSelected),
+                  decoration: _inputDecoration(
+                    isEdit ? 'Nama tidak dapat diubah' : 'Nama Kolektor',
+                    fillColor: (isEdit || (isTambah && notifier.hrmEmployeeSelected)) ? Colors.grey.shade100 : Colors.white,
+                  ).copyWith(
+                    errorText: notifier.manualErrors['nama'],
+                    suffixIcon: isEdit || (isTambah && notifier.hrmEmployeeSelected)
+                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                        : null,
+                  ),
+                  validator: null,
+                ),
+                const SizedBox(height: 16),
+
+                // ── Kantor ──
+                _fieldLabel('Kantor *'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isEdit) ...[
+                      // EDIT: Kantor READ-ONLY, hanya bisa update via tombol
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade400),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${notifier.selectedKantor?.kdKantor ?? '-'} - ${notifier.selectedKantor?.namaKantor ?? '-'}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ),
+                                  const Icon(Icons.lock, size: 16, color: Colors.grey),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton(
+                            onPressed: notifier.isUpdatingKantor ? null : notifier.updateKantorFromHris,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorPrimary,
+                              foregroundColor: colortextwhite,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                            child: notifier.isUpdatingKantor
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: colortextwhite),
+                                  )
+                                : const Text('Update', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    ] else if (isTambah && notifier.hrmOfficeFixed && notifier.selectedKantor != null) ...[
+                      // TAMBAH: Kantor dari HRIS (READONLY)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${notifier.selectedKantor!.kdKantor} - ${notifier.selectedKantor!.namaKantor}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ] else if (isTambah) ...[
+                      // TAMBAH: Dropdown Kantor (jika tidak dari HRIS)
+                      DropdownButtonFormField<KantorDummy>(
+                        value: notifier.selectedKantor,
+                        isExpanded: true,
+                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                        ),
+                        items: notifier.listKantor.map((k) => DropdownMenuItem(
+                          value: k,
+                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
+                        )).toList(),
+                        onChanged: isReadOnly ? null : notifier.setSelectedKantor,
+                        validator: null,
+                      ),
+                    ],
+                    if (notifier.manualErrors['kantor'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 12),
+                        child: Text(
+                          notifier.manualErrors['kantor']!,
+                          style: const TextStyle(fontSize: 12, color: Colors.red),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // User ID (khusus tambah)
                 if (isTambah) ...[
-                  _fieldLabel('User ID'),
+                  _fieldLabel('User ID *'),
                   TextFormField(
                     controller: notifier.userIdCtrl,
                     textCapitalization: TextCapitalization.characters,
@@ -333,25 +519,9 @@ class DataPetugasPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Nama (wajib untuk tambah dan edit)
-                _fieldLabel('Nama'),
-                TextFormField(
-                  controller: notifier.namaCtrl,
-                  readOnly: isReadOnly,
-                  decoration: _inputDecoration(
-                    'Nama Petugas',
-                    fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                  ).copyWith(
-                    errorText: notifier.manualErrors['nama'],
-                  ),
-                  validator: null,
-                ),
-                _fieldNote('* Nama tidak boleh mengandung karakter spesial (!@#\$%^&* dll)'),
-                const SizedBox(height: 16),
-
                 // Password (khusus tambah)
                 if (isTambah) ...[
-                  _fieldLabel('Password'),
+                  _fieldLabel('Password *'),
                   TextFormField(
                     controller: notifier.passwordCtrl,
                     obscureText: notifier.obscure,
@@ -371,7 +541,7 @@ class DataPetugasPage extends StatelessWidget {
                 ],
 
                 // No HP (wajib untuk tambah dan edit)
-                _fieldLabel('No HP'),
+                _fieldLabel('No HP *'),
                 TextFormField(
                   controller: notifier.noHpCtrl,
                   readOnly: isReadOnly,
@@ -391,43 +561,26 @@ class DataPetugasPage extends StatelessWidget {
                 _fieldNote('* No HP wajib diawali 08, hanya boleh angka, min 10 dan maks 14 digit'),
                 const SizedBox(height: 16),
 
-                // NIP (tambah dan edit)
-                if (isFormMode) ...[
-                  _fieldLabel('NIP'),
-                  TextFormField(
-                    controller: notifier.nipCtrl,
-                    readOnly: isReadOnly,
-                    decoration: _inputDecoration(
-                      'NIP',
-                      fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                    ).copyWith(
-                      errorText: notifier.manualErrors['nip'],
-                    ),
-                    validator: null,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
                 // Kode Petugas (tambah dan edit)
                 if (isFormMode) ...[
-                  _fieldLabel('Kode Petugas'),
+                  _fieldLabel('Kode Kolektor *'),
                   TextFormField(
                     controller: notifier.kodePetugasCtrl,
                     readOnly: isReadOnly,
                     decoration: _inputDecoration(
-                      'Kode Petugas',
+                      'Kode Kolektor',
                       fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
                     ).copyWith(
                       errorText: notifier.manualErrors['kodePetugas'],
                     ),
                     validator: null,
                   ),
-                  _fieldNote('* Kode petugas tidak boleh mengandung spasi'),
+                  _fieldNote('* Kode kolektor tidak boleh mengandung spasi'),
                   const SizedBox(height: 16),
                 ],
 
                 // No SBB (wajib untuk tambah dan edit)
-                _fieldLabel('No SBB'),
+                _fieldLabel('No SBB *'),
                 Row(children: [
                   Expanded(
                     flex: 3,
@@ -474,7 +627,7 @@ class DataPetugasPage extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Nama SBB (wajib untuk semua mode form)
-                _fieldLabel('Nama SBB'),
+                _fieldLabel('Nama SBB *'),
                 TextFormField(
                   controller: notifier.namaSbbCtrl,
                   readOnly: true,
@@ -489,49 +642,7 @@ class DataPetugasPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Kantor (tambah dan edit)
-                if (isFormMode) ...[
-                  _fieldLabel('Kantor'),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DropdownButtonFormField<KantorDummy>(
-                        value: notifier.selectedKantor,
-                        isExpanded: true,
-                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
-                        ),
-                        items: notifier.listKantor.map((k) => DropdownMenuItem(
-                          value: k,
-                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
-                        )).toList(),
-                        onChanged: isReadOnly ? null : notifier.setSelectedKantor,
-                        validator: null,
-                      ),
-                      if (notifier.manualErrors['kantor'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            notifier.manualErrors['kantor']!,
-                            style: const TextStyle(fontSize: 12, color: Colors.red),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                const SizedBox(height: 16),
 
                 // Akses / Limit Transaksi (hanya tambah & edit)
                 if (isFormMode) ...[
@@ -700,80 +811,79 @@ class DataPetugasPage extends StatelessWidget {
   }
 
   Future<bool> _validateBeforeSave(DataPetugasNotifier notifier, BuildContext context) async {
-  final isValid = notifier.validateAllFieldsManually();
-  
-  if (!isValid) {
-    await notifier.scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    final isValid = notifier.validateAllFieldsManually();
     
-    // Ubah dari SnackBar menjadi Dialog
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        child: Container(
-          width: 350,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.warning_amber_rounded,
-                  size: 40,
-                  color: Colors.red.shade700,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Validasi Gagal',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Lengkapi semua field yang wajib diisi dengan benar',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorPrimary,
-                    foregroundColor: colortextwhite,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+    if (!isValid) {
+      await notifier.scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          child: Container(
+            width: 350,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
                   ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Icon(
+                    Icons.warning_amber_rounded,
+                    size: 40,
+                    color: Colors.red.shade700,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                const Text(
+                  'Validasi Gagal',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Lengkapi semua field yang wajib diisi dengan benar',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorPrimary,
+                      foregroundColor: colortextwhite,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    return false;
+      );
+      return false;
+    }
+    
+    return true;
   }
-  
-  return true;
-}
 
   Future<bool> _showResetPasswordConfirmDialog(DataPetugasNotifier notifier, BuildContext context) async {
     final petugas = notifier.selectedPetugas;
@@ -804,7 +914,7 @@ class DataPetugasPage extends StatelessWidget {
                   const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('Reset Password',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colortextwhite)),
-                    Text('Data Petugas', style: TextStyle(fontSize: 12, color: colortextwhite)),
+                    Text('Data Kolektor', style: TextStyle(fontSize: 12, color: colortextwhite)),
                   ]),
                 ]),
               ),
@@ -813,7 +923,7 @@ class DataPetugasPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Apakah Anda yakin ingin mereset password petugas ini?',
+                    const Text('Apakah Anda yakin ingin mereset password kolektor ini?',
                         style: TextStyle(fontSize: 14)),
                     const Text('Password akan direset menjadi default: 123456',
                         style: TextStyle(fontSize: 12, color: Colors.grey)),
@@ -832,8 +942,6 @@ class DataPetugasPage extends StatelessWidget {
                           _konfirmasiRow('Nama', petugas.nama ?? '-'),
                           const SizedBox(height: 6),
                           _konfirmasiRow('User ID', petugas.userId ?? '-'),
-                          const SizedBox(height: 6),
-                          _konfirmasiRow('NIP', petugas.nip ?? '-'),
                           const SizedBox(height: 6),
                           _konfirmasiRow('Status', DataPetugasStsrec.statusFor(petugas)),
                         ],
@@ -916,7 +1024,7 @@ class DataPetugasPage extends StatelessWidget {
                   const SizedBox(width: 10),
                   Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colortextwhite)),
-                    const Text('Data Petugas', style: TextStyle(fontSize: 12, color: colortextwhite)),
+                    const Text('Data Kolektor', style: TextStyle(fontSize: 12, color: colortextwhite)),
                   ]),
                 ]),
               ),
@@ -1147,6 +1255,27 @@ class _LimitSection extends StatelessWidget {
           validator: null,
         ),
       ],
+    );
+  }
+}
+
+class RupiahInputFormatter extends TextInputFormatter {
+  final _formatter = NumberFormat('#,###', 'id_ID');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+    final number = int.tryParse(digitsOnly) ?? 0;
+    final formatted = _formatter.format(number);
+    return newValue.copyWith(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

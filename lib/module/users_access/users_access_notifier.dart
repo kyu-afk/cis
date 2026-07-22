@@ -51,6 +51,39 @@ class UsersAccessNotifier extends ChangeNotifier {
   bool isSaving = false;
   bool obscurePass = true;
   bool isChangePassword = false;
+  bool isUpdatingKantor = false;
+
+  // ==================== AKSES SEMUA KANTOR ====================
+  // Sama seperti MEDFO: kalau dicentang, user disimpan dengan kd_kantor = '000'
+  // sehingga UserLevelHelper.canSeeAllKantor() bernilai true dan user tersebut
+  // bisa melihat DATA dari semua kantor.
+  //
+  // PENTING -- ini BUKAN superadmin:
+  // - lvluser tetap 1 (superadmin = lvluser 2, system = lvluser 3).
+  // - Menu yang bisa dibuka tetap mengikuti fasilitas yang dicentang di form ini.
+  //   Bypass menu hanya berlaku untuk lvluser 2/3 (lihat UserLevelHelper).
+  // Jadi efeknya murni memperluas cakupan DATA, bukan cakupan MENU.
+  static const String semuaKantorKode = '000';
+  bool allKantorAccess = false;
+
+  KantorItem get semuaKantorItem => KantorItem(semuaKantorKode, 'SEMUA KANTOR');
+
+  /// Centang / lepas centang "Semua Kantor".
+  void setAllKantorAccess(bool value) {
+    allKantorAccess = value;
+
+    if (value) {
+      selectedKantor = semuaKantorItem;
+    } else {
+      selectedKantor = null;
+      // Kalau user terhubung ke karyawan HRIS, kembalikan ke kantor karyawan
+      // tersebut supaya tidak perlu memilih ulang secara manual.
+      final emp = selectedHrmEmployee;
+      if (emp != null) _applyHrmOffice(emp);
+    }
+    if (_manualErrors.containsKey('kantor')) _manualErrors.remove('kantor');
+    notifyListeners();
+  }
 
   UsersAccessModel? selectedUser;
   KantorItem? selectedKantor;
@@ -101,9 +134,10 @@ class UsersAccessNotifier extends ChangeNotifier {
 
     selectedHrmEmployee = emp;
     hrmSearchController.text = emp.name;
-    ctrlNama.text = emp.name;
-
-    _applyHrmOffice(emp);
+    if (drawerMode != 'edit') {
+      ctrlNama.text = emp.name;
+      _applyHrmOffice(emp);
+    }
     notifyListeners();
   }
 
@@ -120,6 +154,52 @@ class UsersAccessNotifier extends ChangeNotifier {
     selectedHrmEmployee = null;
     hrmSearchController.clear();
     notifyListeners();
+  }
+
+  Future<void> updateKantorFromHris() async {
+    if (drawerMode != 'edit' || selectedUser == null || _sessionUser == null) return;
+    if (allKantorAccess) {
+      _showErrorDialog('User dengan akses Semua Kantor tidak dapat diperbarui');
+      return;
+    }
+    final empId = selectedHrmEmployee?.id ?? selectedUser!.hrmEmployeeId;
+    if (empId == null || empId.isEmpty) {
+      _showErrorDialog('User ini belum terhubung ke data karyawan HRIS');
+      return;
+    }
+    final name = (selectedUser!.namauser ?? ctrlNama.text).trim();
+    if (name.isEmpty) {
+      _showErrorDialog('Nama user tidak ditemukan');
+      return;
+    }
+    isUpdatingKantor = true;
+    notifyListeners();
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: name,
+      );
+      HrmEmployeeModel? emp;
+      for (final raw in results) {
+        final e = HrmEmployeeModel.fromJson(raw);
+        if (e.id == empId) {
+          emp = e;
+          break;
+        }
+      }
+      if (emp?.office?.branchCode == null || emp!.office!.branchCode!.isEmpty) {
+        _showErrorDialog('Data kantor karyawan tidak ditemukan di HRIS');
+        return;
+      }
+      selectedHrmEmployee = emp;
+      _applyHrmOffice(emp);
+      _showSuccessDialog('Kantor berhasil diperbarui dari HRIS');
+    } catch (e) {
+      _showErrorDialog('Error: $e');
+    } finally {
+      isUpdatingKantor = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _loadHrmEmployeeForEdit(UsersAccessModel u) async {
@@ -142,7 +222,6 @@ class UsersAccessNotifier extends ChangeNotifier {
         if (emp.id == empId) {
           selectedHrmEmployee = emp;
           hrmSearchController.text = emp.name;
-          _applyHrmOffice(emp);
           break;
         }
       }
@@ -257,7 +336,7 @@ class UsersAccessNotifier extends ChangeNotifier {
         final allUsers = data.map((e) => UsersAccessModel.fromJson(e)).toList();
 
         final visibleUsers = allUsers
-            .where((u) => (u.kdkantor ?? '') != '000')
+            .where((u) => !((u.kdkantor ?? '') == '000' && (u.lvluser ?? 1) != 1))
             .toList();
 
         _list = _canSeeAllKantor
@@ -358,6 +437,7 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlPass.clear();
     ctrlTgl.clear();
     isChangePassword = false;
+    allKantorAccess = false;
     selectedHrmEmployee = null;
     hrmSearchController.clear();
     formKey.currentState?.reset();
@@ -373,7 +453,10 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlPass.clear();
     isChangePassword = false;
 
-    selectedKantor = _listKantor.where((k) => k.kdKantor == u.kdkantor).firstOrNull;
+    allKantorAccess = (u.kdkantor ?? '') == semuaKantorKode;
+    selectedKantor = allKantorAccess
+        ? semuaKantorItem
+        : _listKantor.where((k) => k.kdKantor == u.kdkantor).firstOrNull;
 
     _selectedFasilitas = [];
     if (u.akses != null) {

@@ -70,7 +70,7 @@ class _LaporanUserAccessNotifier extends ChangeNotifier {
       if (result['value'] == 1) {
         final data = result['data'] as List<dynamic>? ?? [];
         final allUsers = data.map((e) => UsersAccessModel.fromJson(e)).toList();
-        final visible = allUsers.where((u) => (u.kdkantor ?? '') != '000').toList();
+        final visible = allUsers.where((u) => !((u.kdkantor ?? '') == '000' && (u.lvluser ?? 1) != 1)).toList();
         final canSeeAll = UserLevelHelper.canSeeAllKantor(_sessionUser);
         _list = canSeeAll
             ? visible

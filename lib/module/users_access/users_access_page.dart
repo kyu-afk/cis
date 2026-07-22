@@ -253,7 +253,7 @@ class UsersAccessPage extends StatelessWidget {
               const SizedBox(height: 12),
               _actionTile(Icons.edit, 'Edit', colorPrimary, notifier.openDrawerForEdit),
               if (isAktif) ...[
-                _actionTile(Icons.lock_reset, 'Reset Password', Colors.blue, notifier.openDrawerForResetPassword), // TAMBAHKAN INI
+                _actionTile(Icons.lock_reset, 'Reset Password', Colors.blue, notifier.openDrawerForResetPassword),
                 _actionTile(Icons.block, 'Blokir', Colors.orange, notifier.openDrawerForBlokir),
                 _actionTile(Icons.logout, 'Force Logout', Colors.deepOrange, notifier.openDrawerForForceLogout),
               ],
@@ -312,6 +312,8 @@ class UsersAccessPage extends StatelessWidget {
   Widget _buildFormPanel(UsersAccessNotifier notifier, BuildContext context) {
     final isReadOnly = notifier.isReadOnly;
     final isFormMode = notifier.drawerMode == 'tambah' || notifier.drawerMode == 'edit';
+    final isEdit = notifier.drawerMode == 'edit';
+    final isTambah = notifier.drawerMode == 'tambah';
 
     return Form(
       key: notifier.formKey,
@@ -329,24 +331,12 @@ class UsersAccessPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // ── Relasi Karyawan HRIS (TypeAhead, tambah & edit) ──
-                if (isFormMode) ...[
+                // ── Relasi Karyawan HRIS (TypeAhead) - HANYA UNTUK TAMBAH ──
+                if (isTambah) ...[
                   Row(
                     children: [
-                      const Text('Relasi Karyawan HRIS', style: TextStyle(fontSize: 12)),
+                      const Text('Relasi Karyawan HRIS *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       const Spacer(),
-                      if (notifier.selectedHrmEmployee != null && notifier.drawerMode == 'edit')
-                        GestureDetector(
-                          onTap: notifier.clearHrmEmployee,
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.link_off, size: 13, color: Colors.red),
-                              SizedBox(width: 3),
-                              Text('Hapus Relasi', style: TextStyle(fontSize: 11, color: Colors.red)),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -374,20 +364,209 @@ class UsersAccessPage extends StatelessWidget {
                       controller: controller,
                       focusNode: focusNode,
                       decoration: InputDecoration(
-                        hintText: notifier.selectedHrmEmployee != null ? notifier.selectedHrmEmployee!.name : 'Ketik nama atau NIK karyawan...',
+                        hintText: notifier.selectedHrmEmployee != null 
+                            ? notifier.selectedHrmEmployee!.name 
+                            : 'WAJIB: Cari karyawan HRIS terlebih dahulu',
                         prefixIcon: const Icon(Icons.search),
                         border: const OutlineInputBorder(),
                         suffixIcon: notifier.selectedHrmEmployee != null
-                            ? const Icon(Icons.link, size: 18, color: Color(0xff2E7D32))
-                            : null,
+                            ? const Icon(Icons.check_circle, size: 18, color: Color(0xff2E7D32))
+                            : const Icon(Icons.warning, size: 18, color: Colors.orange),
                       ),
                     ),
                   ),
+                  if (notifier.manualErrors['hrmEmployee'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        notifier.manualErrors['hrmEmployee']!,
+                        style: const TextStyle(fontSize: 12, color: Colors.red),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                 ],
 
+                // ── Nama Users ──
+                _fieldLabel('Nama Users *'),
+                TextFormField(
+                  controller: notifier.ctrlNama,
+                  readOnly: isEdit || (isTambah && notifier.hrmEmployeeSelected),
+                  decoration: _inputDecoration(
+                    isEdit ? 'Nama tidak dapat diubah' : 'Nama lengkap user',
+                    fillColor: (isEdit || (isTambah && notifier.hrmEmployeeSelected)) ? Colors.grey.shade100 : Colors.white,
+                  ).copyWith(
+                    errorText: notifier.manualErrors['nama'],
+                    suffixIcon: isEdit || (isTambah && notifier.hrmEmployeeSelected)
+                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                        : null,
+                  ),
+                  validator: null,
+                ),
+                const SizedBox(height: 16),
+
+                // ── Kantor ──
+                _fieldLabel('Kantor *'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isEdit) ...[
+                      // EDIT: Kantor READ-ONLY, hanya bisa update via tombol
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade400),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      notifier.allKantorAccess
+                                          ? 'SEMUA KANTOR'
+                                          : '${notifier.selectedKantor?.kdKantor ?? '-'} - ${notifier.selectedKantor?.namaKantor ?? '-'}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ),
+                                  const Icon(Icons.lock, size: 16, color: Colors.grey),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (!notifier.allKantorAccess) ...[
+                            const SizedBox(width: 10),
+                            ElevatedButton(
+                              onPressed: notifier.isUpdatingKantor ? null : notifier.updateKantorFromHris,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorPrimary,
+                                foregroundColor: colortextwhite,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                elevation: 0,
+                              ),
+                              child: notifier.isUpdatingKantor
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: colortextwhite),
+                                    )
+                                  : const Text('Update', style: TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ] else if (isTambah && notifier.allKantorAccess) ...[
+                      // TAMBAH: Semua Kantor (READONLY)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: const Row(
+                          children: [
+                            Expanded(
+                              child: Text('SEMUA KANTOR', style: TextStyle(fontSize: 14)),
+                            ),
+                            Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ] else if (isTambah && notifier.hrmOfficeFixed && notifier.selectedKantor != null) ...[
+                      // TAMBAH: Kantor dari HRIS (READONLY)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${notifier.selectedKantor!.kdKantor} - ${notifier.selectedKantor!.namaKantor}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ] else if (isTambah) ...[
+                      // TAMBAH: Dropdown Kantor (jika tidak dari HRIS dan bukan semua kantor)
+                      DropdownButtonFormField<KantorItem>(
+                        value: notifier.selectedKantor,
+                        isExpanded: true,
+                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                        ),
+                        items: notifier.listKantor.map((k) => DropdownMenuItem(
+                          value: k,
+                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
+                        )).toList(),
+                        onChanged: isReadOnly ? null : (v) => notifier.setSelectedKantor(v),
+                        validator: null,
+                      ),
+                    ],
+                    if (notifier.manualErrors['kantor'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 12),
+                        child: Text(
+                          notifier.manualErrors['kantor']!,
+                          style: const TextStyle(fontSize: 12, color: Colors.red),
+                        ),
+                      ),
+                    if (isTambah && !isEdit) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: notifier.allKantorAccess,
+                            onChanged: isReadOnly ? null : (v) => notifier.setAllKantorAccess(v ?? false),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: isReadOnly ? null : () => notifier.setAllKantorAccess(!notifier.allKantorAccess),
+                              child: const Text('Semua Kantor', style: TextStyle(fontSize: 13)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 40, bottom: 4),
+                        child: Text(
+                          'User dapat melihat data dari seluruh kantor. Menu yang bisa diakses tetap mengikuti fasilitas yang dipilih di bawah.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // ── User ID ──
-                _fieldLabel('User ID'),
+                _fieldLabel('User ID *'),
                 TextFormField(
                   controller: notifier.ctrlUserId,
                   readOnly: notifier.drawerMode != 'tambah',
@@ -401,25 +580,6 @@ class UsersAccessPage extends StatelessWidget {
                   validator: null,
                 ),
                 _fieldNote('* User ID tidak boleh menggunakan spasi, wajib mengandung huruf dan angka'),
-                const SizedBox(height: 16),
-
-                // ── Nama Users ──
-                _fieldLabel('Nama Users'),
-                TextFormField(
-                  controller: notifier.ctrlNama,
-                  readOnly: isReadOnly || notifier.hrmEmployeeSelected,
-                  decoration: _inputDecoration(
-                    'Nama lengkap user',
-                    fillColor: (isReadOnly || notifier.hrmEmployeeSelected) ? Colors.grey.shade100 : Colors.white,
-                  ).copyWith(
-                    errorText: notifier.manualErrors['nama'],
-                    suffixIcon: notifier.hrmEmployeeSelected
-                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
-                        : null,
-                  ),
-                  validator: null,
-                ),
-                _fieldNote('* Nama Users tidak boleh mengandung karakter spesial (!@#\$%^&* dll)'),
                 const SizedBox(height: 16),
 
                 // ── Password (hanya pada form mode) ──
@@ -475,71 +635,6 @@ class UsersAccessPage extends StatelessWidget {
                     errorText: notifier.manualErrors['tgl'],
                   ),
                   validator: null,
-                ),
-                const SizedBox(height: 16),
-
-                // ── Kantor ──
-                _fieldLabel('Kantor'),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (notifier.hrmOfficeFixed && notifier.selectedKantor != null) ...[
-                      // Kantor sudah dikunci dari data HRIS karyawan
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade400),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${notifier.selectedKantor!.kdKantor} - ${notifier.selectedKantor!.namaKantor}',
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ),
-                            const Icon(Icons.lock, size: 16, color: Colors.grey),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      DropdownButtonFormField<KantorItem>(
-                        value: notifier.selectedKantor,
-                        isExpanded: true,
-                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
-                        ),
-                        items: notifier.listKantor.map((k) => DropdownMenuItem(
-                          value: k,
-                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
-                        )).toList(),
-                        onChanged: isReadOnly ? null : (v) => notifier.setSelectedKantor(v),
-                        validator: null,
-                      ),
-                    ],
-                    if (notifier.manualErrors['kantor'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 12),
-                        child: Text(
-                          notifier.manualErrors['kantor']!,
-                          style: const TextStyle(fontSize: 12, color: Colors.red),
-                        ),
-                      ),
-                  ],
                 ),
                 const SizedBox(height: 16),
 

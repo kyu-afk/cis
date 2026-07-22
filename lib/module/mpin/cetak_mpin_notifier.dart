@@ -119,7 +119,7 @@ class CetakMpinNotifier extends ChangeNotifier {
     if (_alreadyPrinted) {
       _showInfoDialog(
         title: 'Informasi',
-        message: 'MPIN petugas ini sudah pernah dicetak sebelumnya dan tidak dapat dicetak ulang.',
+        message: 'MPIN kolektor ini sudah pernah dicetak sebelumnya dan tidak dapat dicetak ulang.',
         isSuccess: false,
       );
       return;
@@ -128,7 +128,7 @@ class CetakMpinNotifier extends ChangeNotifier {
     if (_collectorId.isEmpty || _noSbb.isEmpty || _kdKantor.isEmpty) {
       _showInfoDialog(
         title: 'Peringatan',
-        message: 'Data petugas belum lengkap',
+        message: 'Data kolektor belum lengkap',
         isSuccess: false,
       );
       return;
@@ -198,7 +198,7 @@ class CetakMpinNotifier extends ChangeNotifier {
                 child: pw.Column(
                   children: [
                     pw.Text(
-                      'MPIN PETUGAS',
+                      'MPIN KOLEKTOR',
                       style: pw.TextStyle(
                         fontSize: 24,
                         fontWeight: pw.FontWeight.bold,
@@ -212,7 +212,7 @@ class CetakMpinNotifier extends ChangeNotifier {
               pw.Divider(height: 1, color: PdfColors.black),
               pw.SizedBox(height: 24),
 
-              _buildInfoRow('Nama Petugas', _namaPetugas),
+              _buildInfoRow('Nama Kolektor', _namaPetugas),
               pw.SizedBox(height: 12),
               _buildInfoRow('No HP', noHpResult.text),
               pw.SizedBox(height: 12),
@@ -347,7 +347,7 @@ class CetakMpinNotifier extends ChangeNotifier {
               ),
               const SizedBox(height: 12),
               Text(
-                'MPIN berhasil dicetak untuk petugas $_namaPetugas',
+                'MPIN berhasil dicetak untuk kolektor $_namaPetugas',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 14, color: Colors.black54),
               ),
@@ -425,7 +425,7 @@ class CetakMpinNotifier extends ChangeNotifier {
               ]),
               const SizedBox(height: 16),
               const Text(
-                'Apakah Anda yakin ingin mencetak MPIN untuk petugas ini?',
+                'Apakah Anda yakin ingin mencetak MPIN untuk kolektor ini?',
                 style: TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 8),

@@ -42,6 +42,7 @@ class DataPetugasModel {
   String? mpin;
   String? mpinLock;
   String? mpinCetak;
+  String? hrmEmployeeId;
 
   DataPetugasModel({
     this.id,
@@ -80,6 +81,7 @@ class DataPetugasModel {
     this.mpin,
     this.mpinLock,
     this.mpinCetak,
+    this.hrmEmployeeId,
   });
 
   factory DataPetugasModel.fromJson(Map<String, dynamic> json) {
@@ -119,6 +121,7 @@ class DataPetugasModel {
       mpin: (json['mpin'] ?? '').toString(),
       mpinLock: (json['mpin_lock'] ?? '').toString(),
       mpinCetak: (json['mpin_cetak'] ?? 'N').toString(),
+      hrmEmployeeId: json['hrm_employee_id']?.toString(),
     );
   }
 }
@@ -171,9 +174,182 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool isLoadingVerifikasi = false;
   bool obscure = true;
   bool isChangePassword = false;
+  bool isUpdatingKantor = false;
 
   DataPetugasModel? selectedPetugas;
   KantorDummy? selectedKantor;
+
+  // ==================== HRM EMPLOYEE TYPEAHEAD ====================
+  HrmEmployeeModel? selectedHrmEmployee;
+  final TextEditingController hrmSearchController = TextEditingController();
+
+  bool get hrmEmployeeSelected => drawerMode == 'tambah' && selectedHrmEmployee != null;
+
+  bool get hrmOfficeFixed =>
+      selectedHrmEmployee?.office != null &&
+      (selectedHrmEmployee!.office!.branchCode?.isNotEmpty ?? false);
+
+  Future<List<HrmEmployeeModel>> searchHrmEmployee(String search) async {
+    if (search.trim().length < 2 || _sessionUser == null) return [];
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: search.trim(),
+      );
+      return results.map((e) => HrmEmployeeModel.fromJson(e)).toList();
+    } catch (e) {
+      if (kDebugMode) print('ERROR searchHrmEmployee (petugas): $e');
+      return [];
+    }
+  }
+
+  void selectHrmEmployee(HrmEmployeeModel emp) {
+    selectedHrmEmployee = emp;
+    hrmSearchController.text = emp.name;
+    namaCtrl.text = emp.name;
+    _applyHrmOffice(emp);
+    notifyListeners();
+  }
+
+  void _applyHrmOffice(HrmEmployeeModel emp) {
+    if (emp.office == null || (emp.office!.branchCode?.isEmpty ?? true)) return;
+    final officeCode = emp.office!.branchCode!;
+    final matched = _listKantor.where((k) => k.kdKantor == officeCode).firstOrNull ??
+        KantorDummy(officeCode, emp.office!.name ?? officeCode, _sessionUser?.bprId ?? '');
+    selectedKantor = matched;
+    if (_manualErrors.containsKey('kantor')) _manualErrors.remove('kantor');
+  }
+
+  void clearHrmEmployee() {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+    notifyListeners();
+  }
+
+  Future<void> _loadHrmEmployeeForEdit(DataPetugasModel p) async {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+
+    final empId = p.hrmEmployeeId;
+    final name = (p.nama ?? '').trim();
+    if (empId == null || empId.isEmpty || name.isEmpty || _sessionUser == null) return;
+
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(bprId: _sessionUser!.bprId, search: name);
+      for (final raw in results) {
+        final emp = HrmEmployeeModel.fromJson(raw);
+        if (emp.id == empId) {
+          selectedHrmEmployee = emp;
+          hrmSearchController.text = emp.name;
+          break;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('_loadHrmEmployeeForEdit (petugas): $e');
+    }
+    notifyListeners();
+  }
+
+  /// Perbarui kantor di form edit dari data HRIS karyawan yang terhubung.
+  Future<void> updateKantorFromHris() async {
+    if (drawerMode != 'edit' || selectedPetugas == null || _sessionUser == null) return;
+    final empId = selectedHrmEmployee?.id ?? selectedPetugas!.hrmEmployeeId;
+    if (empId == null || empId.isEmpty) {
+      _showErrorDialog('Kolektor ini belum terhubung ke data karyawan HRIS');
+      return;
+    }
+    final name = (selectedPetugas!.nama ?? namaCtrl.text).trim();
+    if (name.isEmpty) {
+      _showErrorDialog('Nama kolektor tidak ditemukan');
+      return;
+    }
+    isUpdatingKantor = true;
+    notifyListeners();
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: name,
+      );
+      HrmEmployeeModel? emp;
+      for (final raw in results) {
+        final e = HrmEmployeeModel.fromJson(raw);
+        if (e.id == empId) {
+          emp = e;
+          break;
+        }
+      }
+      if (emp?.office?.branchCode == null || emp!.office!.branchCode!.isEmpty) {
+        _showErrorDialog('Data kantor karyawan tidak ditemukan di HRIS');
+        return;
+      }
+      selectedHrmEmployee = emp;
+      _applyHrmOffice(emp);
+      _showSuccessDialog('Kantor berhasil diperbarui dari HRIS');
+    } catch (e) {
+      _showErrorDialog('Error: $e');
+    } finally {
+      isUpdatingKantor = false;
+      notifyListeners();
+    }
+  }
+
+  /// Aksi "Perbarui Kode Kantor dari HRIS" — re-fetch kantor terbaru karyawan
+  /// yang terhubung, lalu update kd_kantor kolektor ini (field lain tidak berubah).
+  Future<void> perbaruiKantorDariHris(DataPetugasModel p) async {
+    final empId = p.hrmEmployeeId;
+    if (empId == null || empId.isEmpty || _sessionUser == null) {
+      _showErrorDialog('Kolektor ini belum terhubung ke data karyawan HRIS');
+      return;
+    }
+    isSaving = true;
+    notifyListeners();
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: (p.nama ?? '').trim(),
+      );
+      HrmEmployeeModel? emp;
+      for (final raw in results) {
+        final e = HrmEmployeeModel.fromJson(raw);
+        if (e.id == empId) {
+          emp = e;
+          break;
+        }
+      }
+      if (emp?.office?.branchCode == null || emp!.office!.branchCode!.isEmpty) {
+        isSaving = false;
+        notifyListeners();
+        _showErrorDialog('Data kantor karyawan tidak ditemukan di HRIS');
+        return;
+      }
+      final newKdKantor = emp.office!.branchCode!;
+      final result = await CollectorRepository.updateCollector(
+        id: p.id ?? '',
+        userId: p.userId ?? '',
+        nama: p.nama ?? '',
+        noHp: p.noHp ?? '',
+        nip: p.nip ?? '',
+        kdKantor: newKdKantor,
+        kodePetugas: p.kodePetugas ?? '',
+        noSbb: p.noSbb ?? '',
+        namaSbb: p.namaSbb ?? '',
+        bprId: _sessionUser!.bprId,
+        hrmEmployeeId: empId,
+      );
+      isSaving = false;
+      notifyListeners();
+      if (result['value'] == 1) {
+        await _loadData();
+        _showSuccessDialog('Kode kantor berhasil diperbarui dari HRIS');
+      } else {
+        _showErrorDialog(result['message']?.toString() ?? 'Gagal memperbarui kode kantor');
+      }
+    } catch (e) {
+      isSaving = false;
+      notifyListeners();
+      _showErrorDialog('Error: $e');
+    }
+  }
 
   // Manual errors
   Map<String, String> _manualErrors = {};
@@ -470,7 +646,7 @@ class DataPetugasNotifier extends ChangeNotifier {
   Future<Map<String, dynamic>> _saveTcodeAksesLimit() async {
     final uid = await _resolvePetugasUserIdAsync();
     if (uid.isEmpty) {
-      return {'value': 0, 'message': 'User ID petugas tidak ditemukan'};
+      return {'value': 0, 'message': 'User ID kolektor tidak ditemukan'};
     }
     if (isLoadingTcodeAkses) {
       return {'value': 0, 'message': 'Data tcode masih dimuat. Tunggu sebentar lalu coba lagi.'};
@@ -541,12 +717,12 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   String get drawerTitle {
     switch (drawerMode) {
-      case 'tambah': return 'Tambah Data Petugas';
-      case 'edit': return 'Edit Data Petugas';
-      case 'hapus': return 'Hapus Data Petugas';
-      case 'blokir': return 'Blokir Petugas';
-      case 'unblokir': return 'Unblokir Petugas';
-      case 'resetPassword': return 'Reset Password Petugas';
+      case 'tambah': return 'Tambah Data Kolektor';
+      case 'edit': return 'Edit Data Kolektor';
+      case 'hapus': return 'Hapus Data Kolektor';
+      case 'blokir': return 'Blokir Kolektor';
+      case 'unblokir': return 'Unblokir Kolektor';
+      case 'resetPassword': return 'Reset Password Kolektor';
       default: return '';
     }
   }
@@ -687,6 +863,8 @@ class DataPetugasNotifier extends ChangeNotifier {
   void _resetForm() {
     selectedPetugas = null;
     selectedKantor = null;
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
     _manualErrors.clear();
     userIdCtrl.clear();
     namaCtrl.clear();
@@ -807,6 +985,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     } catch (_) {
       selectedKantor = _listKantor.isNotEmpty ? _listKantor.first : null;
     }
+    unawaited(_loadHrmEmployeeForEdit(p));
     notifyListeners();
   }
 
@@ -896,11 +1075,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah || isEdit) {
-      final nipError = _validateNipManual(nipCtrl.text.trim());
-      if (nipError != null) {
-        errors['nip'] = nipError;
-        allValid = false;
-      }
+      // PATCH: field NIP dihilangkan dari validasi (sudah tidak dipakai lagi di form).
     }
     
     if (isTambah || isEdit) {
@@ -1016,9 +1191,6 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   String? _validateNamaManual(String value) {
     if (value.isEmpty) return 'Nama wajib diisi';
-    if (RegExp(r'[!@#\$%^&*()_+={}\[\]|\\:;"<>,.?/~`]').hasMatch(value)) {
-      return 'Nama tidak boleh mengandung karakter spesial';
-    }
     return null;
   }
 
@@ -1043,7 +1215,7 @@ class DataPetugasNotifier extends ChangeNotifier {
   }
 
   String? _validateKodePetugasManual(String value) {
-    if (value.isEmpty) return 'Kode petugas wajib diisi';
+    if (value.isEmpty) return 'Kode kolektor wajib diisi';
     if (RegExp(r'\s').hasMatch(value)) return 'Kode tidak boleh mengandung spasi';
     return null;
   }
@@ -1351,7 +1523,7 @@ class DataPetugasNotifier extends ChangeNotifier {
                         Text('Konfirmasi Tambah Data',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                         SizedBox(height: 2),
-                        Text('Data Petugas',
+                        Text('Data Kolektor',
                             style: TextStyle(fontSize: 12, color: Colors.white70)),
                       ],
                     ),
@@ -1363,7 +1535,7 @@ class DataPetugasNotifier extends ChangeNotifier {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Periksa kembali data petugas yang akan ditambahkan:',
+                    const Text('Periksa kembali data kolektor yang akan ditambahkan:',
                         style: TextStyle(fontSize: 13, color: Colors.grey)),
                     const SizedBox(height: 14),
                     Container(
@@ -1383,9 +1555,7 @@ class DataPetugasNotifier extends ChangeNotifier {
                           const SizedBox(height: 6),
                           _konfirmasiRow('No HP', noHpCtrl.text.trim()),
                           const SizedBox(height: 6),
-                          _konfirmasiRow('NIP', nipCtrl.text.trim()),
-                          const SizedBox(height: 6),
-                          _konfirmasiRow('Kode Petugas', kodePetugasCtrl.text.trim()),
+                          _konfirmasiRow('Kode Kolektor', kodePetugasCtrl.text.trim()),
                           const SizedBox(height: 6),
                           _konfirmasiRow('No SBB', noSbbCtrl.text.trim()),
                           const SizedBox(height: 6),
@@ -1464,7 +1634,7 @@ class DataPetugasNotifier extends ChangeNotifier {
                   ]),
                   const SizedBox(height: 6),
                   Text(
-                    'Masukkan alasan untuk melakukan $aksiLabel pada petugas ini.',
+                    'Masukkan alasan untuk melakukan $aksiLabel pada kolektor ini.',
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
@@ -1569,7 +1739,7 @@ class DataPetugasNotifier extends ChangeNotifier {
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         const SizedBox(height: 2),
-                        const Text('Data Petugas', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                        const Text('Data Kolektor', style: TextStyle(fontSize: 12, color: Colors.white70)),
                       ],
                     ),
                   ],
@@ -1582,8 +1752,8 @@ class DataPetugasNotifier extends ChangeNotifier {
                   children: [
                     Text(
                       isEditMode
-                          ? 'Periksa kembali perubahan data petugas berikut:'
-                          : 'Apakah Anda yakin ingin $aksiLabel petugas ini?',
+                          ? 'Periksa kembali perubahan data kolektor berikut:'
+                          : 'Apakah Anda yakin ingin $aksiLabel kolektor ini?',
                       style: const TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                     const SizedBox(height: 14),
@@ -1665,8 +1835,6 @@ class DataPetugasNotifier extends ChangeNotifier {
                           children: [
                             _konfirmasiRow('Nama', selectedPetugas?.nama ?? '-'),
                             const SizedBox(height: 6),
-                            _konfirmasiRow('NIP', selectedPetugas?.nip ?? '-'),
-                            const SizedBox(height: 6),
                             _konfirmasiRow('No SBB', selectedPetugas?.noSbb ?? '-'),
                             const SizedBox(height: 6),
                             _konfirmasiRow('Status', DataPetugasStsrec.statusFor(selectedPetugas)),
@@ -1747,8 +1915,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     
     _addChange(changes, 'Nama', old.nama, namaCtrl.text.trim());
     _addChange(changes, 'No HP', old.noHp, noHpCtrl.text.trim());
-    _addChange(changes, 'NIP', old.nip, nipCtrl.text.trim());
-    _addChange(changes, 'Kode Petugas', old.kodePetugas, kodePetugasCtrl.text.trim());
+    _addChange(changes, 'Kode Kolektor', old.kodePetugas, kodePetugasCtrl.text.trim());
     _addChange(changes, 'No SBB', old.noSbb, noSbbCtrl.text.trim());
     _addChange(changes, 'Nama SBB', old.namaSbb, namaSbbCtrl.text.trim());
 
@@ -1857,7 +2024,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       if (result['value'] == 1) {
         closeDrawer();
         await _loadData();
-        _showSuccessDialog('Reset password petugas berhasil!');
+        _showSuccessDialog('Reset password kolektor berhasil!');
       } else {
         _showErrorDialog(result['message']?.toString() ?? 'Terjadi kesalahan');
       }
@@ -1895,6 +2062,7 @@ class DataPetugasNotifier extends ChangeNotifier {
           kodePetugas: kodePetugasCtrl.text.trim(),
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
+          hrmEmployeeId: selectedHrmEmployee?.id,
           limitData: limitData,
           aksesData: aksesData,
         );
@@ -1915,6 +2083,7 @@ class DataPetugasNotifier extends ChangeNotifier {
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           password: isChangePassword ? passwordCtrl.text.trim() : null,
+          hrmEmployeeId: selectedHrmEmployee?.id ?? selectedPetugas?.hrmEmployeeId,
           limitData: limitData,
           aksesData: aksesData,
         );
@@ -1966,11 +2135,11 @@ class DataPetugasNotifier extends ChangeNotifier {
       await refreshList();
       String msg = '';
       switch (currentMode) {
-        case 'tambah': msg = 'Data petugas berhasil ditambahkan!'; break;
-        case 'edit': msg = 'Data petugas berhasil diupdate!'; break;
-        case 'hapus': msg = 'Data petugas berhasil dihapus!'; break;
-        case 'blokir': msg = 'Petugas berhasil diblokir!'; break;
-        case 'unblokir': msg = 'Petugas berhasil di-unblokir!'; break;
+        case 'tambah': msg = 'Data kolektor berhasil ditambahkan!'; break;
+        case 'edit': msg = 'Data kolektor berhasil diupdate!'; break;
+        case 'hapus': msg = 'Data kolektor berhasil dihapus!'; break;
+        case 'blokir': msg = 'Kolektor berhasil diblokir!'; break;
+        case 'unblokir': msg = 'Kolektor berhasil di-unblokir!'; break;
         default: msg = 'Operasi berhasil!';
       }
       _showSuccessDialog(msg);
@@ -2058,6 +2227,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     _disposeTcodeAksesControllers();
     _debounceTimer?.cancel();
     scrollController.dispose();
+    hrmSearchController.dispose();
     searchCtrl.dispose();
     userIdCtrl.dispose();
     namaCtrl.dispose();

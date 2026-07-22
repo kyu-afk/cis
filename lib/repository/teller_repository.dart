@@ -243,6 +243,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String tanggalExpired,
     required String batch, 
     String? bprId,
+    String? hrmEmployeeId,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -255,6 +256,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nohp':             noHp,
         'nip':              nip,
         'kd_kantor':        kdKantor,
+        'hrm_employee_id':  hrmEmployeeId ?? '',
         'sbb_teller':       sbbTeller,
         'nama_sbb':         namaSbb,
         'tanggal_expired':  tanggalExpired,
@@ -297,6 +299,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String batch,
     String? password,
     String? bprId,
+    String? hrmEmployeeId,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -308,6 +311,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nohp':             noHp,
         'nip':              nip,
         'kd_kantor':        kdKantor,
+        'hrm_employee_id':  hrmEmployeeId ?? '',
         'sbb_teller':       sbbTeller,
         'nama_sbb':         namaSbb,
         'tanggal_expired':  tanggalExpired,

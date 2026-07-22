@@ -139,7 +139,7 @@ class ModalKolektorNotifier extends ChangeNotifier {
   Future<void> simpan() async {
     if (!formKey.currentState!.validate()) return;
     if (selectedPetugasHp == null) {
-      _snack('Pilih petugas terlebih dahulu', isError: true);
+      _snack('Pilih kolektor terlebih dahulu', isError: true);
       return;
     }
     if (nominalValue <= 0) {
@@ -149,6 +149,15 @@ class ModalKolektorNotifier extends ChangeNotifier {
     isSaving = true;
     notifyListeners();
     try {
+      // PATCH: tangkap nilai form ke variabel lokal SEBELUM closeDrawer() dipanggil,
+      // karena closeDrawer() -> _resetForm() mengosongkan selectedPetugasNama/
+      // selectedPetugasHp/nominalCtrl. Sebelumnya struk pertama selalu tercetak
+      // kosong karena _printStruk() membaca nilai yang sudah direset.
+      final cetakNama = selectedPetugasNama ?? '';
+      final cetakNoHp = selectedPetugasHp ?? '';
+      final cetakNominal = nominalValue;
+      final cetakKeterangan = keteranganCtrl.text.trim();
+
       final res = await ModalKolektorRepository.add(
         petugasHp: selectedPetugasHp!,
         petugasNama: selectedPetugasNama ?? '',
@@ -160,10 +169,10 @@ class ModalKolektorNotifier extends ChangeNotifier {
         await _load();
         _snack('Modal berhasil ditambahkan', isError: false);
         await _printStruk(
-          nama: selectedPetugasNama ?? '',
-          noHp: selectedPetugasHp ?? '',
-          nominal: nominalValue,
-          keterangan: keteranganCtrl.text.trim(),
+          nama: cetakNama,
+          noHp: cetakNoHp,
+          nominal: cetakNominal,
+          keterangan: cetakKeterangan,
           nodokumen: DateTime.now().microsecondsSinceEpoch.toString(),
         );
       } else {
@@ -251,7 +260,7 @@ class ModalKolektorNotifier extends ChangeNotifier {
               pw.SizedBox(height: 24),
               _buildInfoRow('No. Dokumen', nodokumen),
               pw.SizedBox(height: 12),
-              _buildInfoRow('Nama Petugas', nama),
+              _buildInfoRow('Nama Kolektor', nama),
               pw.SizedBox(height: 12),
               _buildInfoRow('No HP', noHp),
               pw.SizedBox(height: 12),
@@ -270,9 +279,9 @@ class ModalKolektorNotifier extends ChangeNotifier {
                     children: [
                       pw.Container(width: 200, height: 1, color: PdfColors.grey300),
                       pw.SizedBox(height: 8),
-                      pw.Text('Pejabat', style: pw.TextStyle(fontSize: 10)),
+                      pw.Text('Disetujui oleh', style: pw.TextStyle(fontSize: 10)),
                       pw.SizedBox(height: 70),
-                      pw.Text(session.usersId, style: pw.TextStyle(fontSize: 8)),
+                      pw.Text(session.namaUsers, style: pw.TextStyle(fontSize: 8)),
                       pw.Text('_____________________', style: pw.TextStyle(fontSize: 10)),
                     ],
                   ),

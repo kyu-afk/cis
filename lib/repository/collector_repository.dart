@@ -287,6 +287,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String noSbb,
     required String namaSbb,
     String? bprId,
+    String? hrmEmployeeId,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
   }) async {
@@ -303,6 +304,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "nohp": noHp,
         "nip": nip,
         "kd_kantor": kdKantor,
+        "hrm_employee_id": hrmEmployeeId ?? '',
         "kd_collector": kodePetugas,
         "nosbb": noSbb,
         "nama_sbb": namaSbb,
@@ -349,6 +351,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String namaSbb,
     String? password,
     String? bprId,
+    String? hrmEmployeeId,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
   }) async {
@@ -365,6 +368,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "nohp": noHp,
         "nip": nip,
         "kd_kantor": kdKantor,
+        "hrm_employee_id": hrmEmployeeId ?? '',
         "kd_collector": kodePetugas,
         "nosbb": noSbb,
         "nama_sbb": namaSbb,

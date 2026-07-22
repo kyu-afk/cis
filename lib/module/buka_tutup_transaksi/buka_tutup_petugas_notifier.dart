@@ -116,7 +116,7 @@ class BukaTutupPetugasNotifier extends ChangeNotifier {
           _originalStatus[p.id] = p.transaksiKolektor;
         }
       } else {
-        errorMessage = result['message'] ?? 'Gagal memuat data petugas';
+        errorMessage = result['message'] ?? 'Gagal memuat data kolektor';
       }
     } catch (e) {
       errorMessage = 'Terjadi kesalahan: $e';
@@ -212,7 +212,7 @@ class BukaTutupPetugasNotifier extends ChangeNotifier {
                         Text('Konfirmasi Perubahan',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                         SizedBox(height: 2),
-                        Text('Buka/Tutup Transaksi Petugas',
+                        Text('Buka/Tutup Transaksi Kolektor',
                             style: TextStyle(fontSize: 12, color: Colors.white70)),
                       ],
                     ),
@@ -224,7 +224,7 @@ class BukaTutupPetugasNotifier extends ChangeNotifier {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Periksa kembali perubahan status transaksi petugas berikut:',
+                    const Text('Periksa kembali perubahan status transaksi kolektor berikut:',
                         style: TextStyle(fontSize: 13, color: Colors.grey)),
                     const SizedBox(height: 14),
                     
@@ -360,7 +360,7 @@ class BukaTutupPetugasNotifier extends ChangeNotifier {
 
     for (final petugas in petugasYangDiubah) {
       if (petugas.noHp.isEmpty) {
-        errors.add('No HP petugas ${petugas.nama} tidak ditemukan');
+        errors.add('No HP kolektor ${petugas.nama} tidak ditemukan');
         allSuccess = false;
         continue;
       }

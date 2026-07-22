@@ -173,7 +173,7 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                const Text('Cari Petugas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                const Text('Cari Kolektor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 _buildTypeAhead(n),
                 const SizedBox(height: 16),
@@ -183,7 +183,7 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
                   controller: n.noHpCtrl,
                   readOnly: true,
                   decoration: InputDecoration(
-                    hintText: 'Otomatis dari pilihan petugas',
+                    hintText: 'Otomatis dari pilihan kolektor',
                     hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
                     filled: true,
                     fillColor: const Color(0xffF3F5F4),
@@ -379,7 +379,7 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
             n.noHpCtrl.clear();
             n.toggleDropdown(v.isNotEmpty);
           },
-          validator: (_) => n.selectedPetugasHp == null ? 'Pilih petugas dari daftar' : null,
+          validator: (_) => n.selectedPetugasHp == null ? 'Pilih kolektor dari daftar' : null,
         ),
         if (n.showDropdown && suggestions.isNotEmpty)
           Container(

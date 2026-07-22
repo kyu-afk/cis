@@ -65,7 +65,7 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
   Future<void> _loadPetugas() async {
     try {
       final result = await CollectorRepository.inquiryCollector(limit: 500);
-      if (kDebugMode) print('LAPORAN PETUGAS: ${result['value']}');
+      if (kDebugMode) print('LAPORAN KOLEKTOR: ${result['value']}');
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
         final allList = data
@@ -80,7 +80,7 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
         _list = [];
       }
     } catch (e) {
-      if (kDebugMode) print('ERROR LAPORAN PETUGAS: $e');
+      if (kDebugMode) print('ERROR LAPORAN KOLEKTOR: $e');
       _list = [];
     }
     _applyFilter();
@@ -182,7 +182,7 @@ class LaporanDataPetugasPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
       color: colorPrimary,
       child: const Text(
-        'Laporan Data Petugas',
+        'Laporan Data Kolektor',
         style: TextStyle(color: colortextwhite, fontSize: 24, fontWeight: FontWeight.w700),
       ),
     );
@@ -251,7 +251,7 @@ class LaporanDataPetugasPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns(_LaporanDataPetugasNotifier notifier) => [
         const AppGridColumn('no', 'No', width: 60, align: Alignment.center),
-        const AppGridColumn('nama', 'Nama Petugas', width: 300),
+        const AppGridColumn('nama', 'Nama Kolektor', width: 300),
         const AppGridColumn('noHp', 'No HP', width: 270),
         const AppGridColumn('kantor', 'Kantor', width: 280),
         AppGridColumn('statusAkun', 'Status Akun',

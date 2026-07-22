@@ -85,10 +85,10 @@ class PengisianModalNotifier extends ChangeNotifier {
           getKdKantor: (p) => p.kdKantor,
         );
       } else {
-        errorMessage = result['message'] ?? 'Gagal memuat data petugas';
+        errorMessage = result['message'] ?? 'Gagal memuat data kolektor';
       }
     } catch (e) {
-      errorMessage = 'Terjadi kesalahan saat load petugas: $e';
+      errorMessage = 'Terjadi kesalahan saat load kolektor: $e';
     }
   }
 
@@ -233,11 +233,11 @@ class PengisianModalNotifier extends ChangeNotifier {
 
   String? validateNamaPetugas(String? v) {
     final text = (v ?? '').trim();
-    if (text.isEmpty) return 'Nama Petugas wajib diisi';
+    if (text.isEmpty) return 'Nama Kolektor wajib diisi';
     final exists = _listPetugas.any(
       (p) => p.nama == text && DataPetugasStsrec.isAktif(p),
     );
-    if (!exists) return 'Pilih petugas dari dropdown yang tersedia';
+    if (!exists) return 'Pilih kolektor dari dropdown yang tersedia';
     return null;
   }
 
@@ -297,7 +297,7 @@ class PengisianModalNotifier extends ChangeNotifier {
                         Text('Konfirmasi Pengisian Modal',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                         SizedBox(height: 2),
-                        Text('Petugas', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                        Text('Kolektor', style: TextStyle(fontSize: 12, color: Colors.white70)),
                       ],
                     ),
                   ],
@@ -322,7 +322,7 @@ class PengisianModalNotifier extends ChangeNotifier {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _infoRow('Nama Petugas', namaPetugasCtrl.text.trim()),
+                          _infoRow('Nama Kolektor', namaPetugasCtrl.text.trim()),
                           const SizedBox(height: 8),
                           _infoRow('No HP', noHpCtrl.text.trim()),
                           const SizedBox(height: 8),
@@ -361,7 +361,7 @@ class PengisianModalNotifier extends ChangeNotifier {
 
   Future<void> _saveAndPrint(String nodokumen) async {
     if (selectedPetugasNoHp == null) {
-      _showErrorDialog('Silakan pilih petugas terlebih dahulu');
+      _showErrorDialog('Silakan pilih kolektor terlebih dahulu');
       return;
     }
 
@@ -448,7 +448,7 @@ class PengisianModalNotifier extends ChangeNotifier {
 
               _buildInfoRow('No. Dokumen', nodokumen),
               pw.SizedBox(height: 12),
-              _buildInfoRow('Nama Petugas', nama),
+              _buildInfoRow('Nama Kolektor', nama),
               pw.SizedBox(height: 12),
               _buildInfoRow('No HP', noHp),
               pw.SizedBox(height: 12),
@@ -832,7 +832,7 @@ class PengisianModalNotifier extends ChangeNotifier {
   Future<void> simpan() async {
     if (!formKey.currentState!.validate()) return;
     if (selectedPetugasNoHp == null) {
-      _showErrorDialog('Silakan pilih petugas terlebih dahulu');
+      _showErrorDialog('Silakan pilih kolektor terlebih dahulu');
       return;
     }
 

@@ -55,17 +55,23 @@ class Pref {
     );
   }
 
-  // Hapus semua data termasuk fasilitas dan token (dipanggil saat logout)
+  // Hapus semua data termasuk fasilitas dan token (dipanggil saat logout).
+  // PATCH: dijalankan paralel (bukan berurutan) supaya lebih cepat selesai
+  // dalam jendela waktu yang sangat sempit saat browser tab di-close
+  // (event beforeunload/pagehide cuma kasih waktu singkat sebelum tab
+  // benar-benar tertutup).
   Future<void> hapus() async {
     SharedPreferences pref = await SharedPreferences.getInstance();
-    await pref.remove(Pref.bprId);
-    await pref.remove(Pref.usersId);
-    await pref.remove(Pref.namaUsers);
-    await pref.remove(Pref.kodeKantor);
-    await pref.remove(Pref.namaKantor);
-    await pref.remove(Pref.lvlUser);
-    await pref.remove(Pref.fasilitas);
-    await pref.remove(Pref.authToken);
+    await Future.wait([
+      pref.remove(Pref.bprId),
+      pref.remove(Pref.usersId),
+      pref.remove(Pref.namaUsers),
+      pref.remove(Pref.kodeKantor),
+      pref.remove(Pref.namaKantor),
+      pref.remove(Pref.lvlUser),
+      pref.remove(Pref.fasilitas),
+      pref.remove(Pref.authToken),
+    ]);
   }
 
   Future<void> remove() async {

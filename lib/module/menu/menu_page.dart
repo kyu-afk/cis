@@ -66,14 +66,17 @@ class MenuPage extends StatelessWidget {
               menu: 'SETUP', submenu: 'LIMIT SETOR'),
           _MenuItem('Transaksi Collector', Icons.build, page: 14,
               menu: 'SETUP', submenu: 'TRANSAKSI COLLECTOR'),
-          _MenuItem('SBB Perantara', Icons.account_balance, page: 15,
-              menu: 'SETUP', submenu: 'SBB PERANTARA'),
+          // PATCH: SBB Perantara disembunyikan dari menu (route & halaman tetap ada).
+          // _MenuItem('SBB Perantara', Icons.account_balance, page: 15,
+          //     menu: 'SETUP', submenu: 'SBB PERANTARA'),
         ]),
-        const _MenuItem('DATA TELLER', Icons.account_box, page: 20,
-            menu: 'DATA TELLER', submenu: 'DATA TELLER'),
-        const _MenuItem('DATA PETUGAS', Icons.badge, page: 21,
-            menu: 'DATA PETUGAS', submenu: 'DATA PETUGAS'),
-        const _MenuItem('M-PIN PETUGAS', Icons.pin, menu: 'M-PIN', children: [
+        const _MenuItem('MASTER DATA', Icons.dns, menu: 'MASTER DATA', children: [
+          _MenuItem(' Data Teller', Icons.account_box, page: 20,
+              menu: 'DATA TELLER', submenu: 'DATA TELLER'),
+          _MenuItem('Data Kolektor', Icons.badge, page: 21,
+              menu: 'DATA PETUGAS', submenu: 'DATA PETUGAS'),
+        ]),
+        const _MenuItem('M-PIN KOLEKTOR', Icons.pin, menu: 'M-PIN', children: [
           _MenuItem('Generate M-PIN', Icons.qr_code, page: 30,
               menu: 'M-PIN', submenu: 'GENERATE M-PIN'),
           _MenuItem('Cetak M-PIN', Icons.print, page: 31,
@@ -85,7 +88,7 @@ class MenuPage extends StatelessWidget {
         ]),
         const _MenuItem('BUKA & TUTUP TRANSAKSI', Icons.dashboard,
             menu: 'BUKA & TUTUP TRANSAKSI', children: [
-          _MenuItem('Petugas', Icons.person_search, page: 70,
+          _MenuItem('Kolektor', Icons.person_search, page: 70,
               menu: 'BUKA & TUTUP TRANSAKSI', submenu: 'PETUGAS'),
           _MenuItem('Teller', Icons.account_balance, page: 71,
               menu: 'BUKA & TUTUP TRANSAKSI', submenu: 'TELLER'),
@@ -100,9 +103,9 @@ class MenuPage extends StatelessWidget {
               menu: 'LAPORAN', submenu: 'USER ACCESS'),
           _MenuItem('Data Teller', Icons.account_box, page: 62,
               menu: 'LAPORAN', submenu: 'DATA TELLER'),
-          _MenuItem('Data Petugas', Icons.badge, page: 63,
+          _MenuItem('Data Kolektor', Icons.badge, page: 63,
               menu: 'LAPORAN', submenu: 'DATA PETUGAS'),
-          _MenuItem('Transaksi Petugas', Icons.receipt_long, page: 64, // 🔥 TAMBAHKAN
+          _MenuItem('Transaksi Kolektor', Icons.receipt_long, page: 64, // 🔥 TAMBAHKAN
               menu: 'LAPORAN', submenu: 'TRANSAKSI PETUGAS'),
         ]),
       ];

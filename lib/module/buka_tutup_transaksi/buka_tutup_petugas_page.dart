@@ -215,7 +215,7 @@ class _BukaTutupPetugasPageState extends State<BukaTutupPetugasPage> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text('Buka Tutup Transaksi — Petugas'),
+      title: const Text('Buka Tutup Transaksi — Kolektor'),
       backgroundColor: colorPrimary,
       foregroundColor: colortextwhite,
       elevation: 0,
@@ -277,7 +277,7 @@ class _BukaTutupPetugasPageState extends State<BukaTutupPetugasPage> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            ' Total Petugas: ${notifier.listPetugas.length}',
+            ' Total Kolektor: ${notifier.listPetugas.length}',
             style: const TextStyle(
               color: colorPrimary,
               fontWeight: FontWeight.w600,
@@ -320,7 +320,7 @@ class _BukaTutupPetugasPageState extends State<BukaTutupPetugasPage> {
               GridColumn(
                 columnName: 'nama',
                 minimumWidth: 130,
-                label: _headerCell('Nama petugas', Alignment.centerLeft),
+                label: _headerCell('Nama kolektor', Alignment.centerLeft),
               ),
               GridColumn(
                 columnName: 'noHp',

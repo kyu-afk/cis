@@ -17,7 +17,7 @@ class SearchableDropdownPetugas extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onPetugasSelected,
-    this.hintText = 'Cari nama petugas...',
+    this.hintText = 'Cari nama kolektor...',
     this.isReadOnly = false,
     this.additionalFilter,
   });
@@ -154,7 +154,7 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
           ),
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return 'Nama petugas wajib diisi';
+              return 'Nama kolektor wajib diisi';
             }
             return null;
           },

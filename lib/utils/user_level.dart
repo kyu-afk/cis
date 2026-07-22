@@ -47,19 +47,30 @@ class UserLevelHelper {
   static bool isSystem(UsersModel? users) =>
       fromUsers(users) == UserLevel.system;
 
-  /// lvl 2 atau lvl 3: keduanya bisa melihat semua kode kantor di data
+  /// lvl 2 atau lvl 3: keduanya bisa melihat semua kode kantor di data.
+  /// PATCH: user lvl 1 BIASA dengan kode_kantor == '000' ("Semua Kantor",
+  /// diaktifkan lewat toggle di form User Access) juga bisa melihat semua
+  /// kantor. Ini BUKAN superadmin — lvluser tetap 1, menu yang bisa dibuka
+  /// tetap mengikuti fasilitas yang dicentang. Efeknya murni memperluas
+  /// cakupan DATA yang terlihat, bukan cakupan MENU.
   static bool canSeeAllKantor(UsersModel? users) {
     final lvl = fromUsers(users);
-    return lvl == UserLevel.superAdmin || lvl == UserLevel.system;
+    if (lvl == UserLevel.superAdmin || lvl == UserLevel.system) return true;
+    return (users?.kodeKantor ?? '') == '000';
   }
 
   /// lvl 1: hanya lihat data kode kantornya sendiri
   static bool isFilteredByKantor(UsersModel? users) =>
       !canSeeAllKantor(users);
 
-  /// Kode kantor 000 tidak boleh muncul di list User Access
+  /// Kode kantor 000 dipakai untuk 2 hal yang berbeda:
+  /// 1. Akun sistem auto-provisioned (ADMIN.../SYSTEM..., lvluser 2 atau 3)
+  ///    → HARUS disembunyikan dari list User Access (bukan akun yang dikelola manual).
+  /// 2. User "Semua Kantor" biasa (lvluser tetap 1, dibuat manual lewat toggle
+  ///    di form User Access) → HARUS tetap tampil & bisa dikelola seperti user lain.
+  /// Pembeda: lvluser. Auto-provisioned selalu lvluser 2/3, "Semua Kantor" selalu lvluser 1.
   static bool shouldHideFromUserList(UsersModel? users) =>
-      (users?.kodeKantor ?? '') == '000';
+      (users?.kodeKantor ?? '') == '000' && (users?.lvlUser ?? 1) != 1;
 
   /// Apakah menu tertentu boleh diakses oleh level system (lvl 3)?
   /// System hanya boleh akses: Kantor dan User Access.
@@ -69,13 +80,17 @@ class UserLevelHelper {
   }
 
   /// Apakah menu tertentu boleh diakses oleh super admin (lvl 2)?
-  /// Super admin hanya boleh akses: Kantor, User Access, Setup, dan Laporan.
+  /// Super admin hanya boleh akses: Kantor, User Access, Setup, Laporan,
+  /// dan Master Data (Data Teller & Data Petugas).
   static bool superAdminCanAccessMenu(String menu) {
     final key = menu.trim().toUpperCase();
     return key == 'KANTOR' ||
         key == 'USER ACCESS' ||
         key == 'SETUP' ||
-        key == 'LAPORAN';
+        key == 'LAPORAN' ||
+        key == 'MASTER DATA' ||
+        key == 'DATA TELLER' ||
+        key == 'DATA PETUGAS';
   }
 
   /// Super admin TIDAK lagi bypass semua fasilitas —

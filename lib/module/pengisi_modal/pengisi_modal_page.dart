@@ -369,7 +369,7 @@ class _PengisianModalPageState extends State<PengisianModalPage> {
   // PERBAIKAN 1: Perbaiki kolom aksi agar bisa diklik
   List<AppGridColumn> _buildGridColumns(PengisianModalNotifier notifier) => [
     const AppGridColumn('no', 'No', width: 60, align: Alignment.centerLeft),
-    const AppGridColumn('namaPetugas', 'Nama Petugas', width: 250, align: Alignment.centerLeft),
+    const AppGridColumn('namaPetugas', 'Nama Kolektor', width: 250, align: Alignment.centerLeft),
     const AppGridColumn('noHp', 'No HP', width: 200, align: Alignment.centerLeft),
     const AppGridColumn('nominal', 'Nominal', width: 200, align: Alignment.centerRight, headerAlign: Alignment.centerLeft),
     const AppGridColumn('waktu', 'Waktu', width: 190, align: Alignment.centerLeft),
@@ -466,7 +466,7 @@ class _PengisianModalPageState extends State<PengisianModalPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                const Text('Nama Petugas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                const Text('Nama Kolektor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 _buildSearchableDropdown(notifier),
                 const SizedBox(height: 16),
@@ -476,7 +476,7 @@ class _PengisianModalPageState extends State<PengisianModalPage> {
                   controller: notifier.noHpCtrl,
                   readOnly: true,
                   decoration: InputDecoration(
-                    hintText: 'No HP akan muncul setelah pilih petugas',
+                    hintText: 'No HP akan muncul setelah pilih kolektor',
                     hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
                     filled: true,
                     fillColor: const Color(0xffF8FAF9),
@@ -586,7 +586,7 @@ class _PengisianModalPageState extends State<PengisianModalPage> {
             }
           },
           decoration: InputDecoration(
-            hintText: 'Ketik nama petugas...',
+            hintText: 'Ketik nama kolektor...',
             hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
             filled: true,
             fillColor: Colors.white,

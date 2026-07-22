@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/index.dart';
 import '../../utils/colors.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import 'data_teller_notifier.dart';
@@ -258,6 +260,12 @@ class DataTellerPage extends StatelessWidget {
               const SizedBox(height: 12),
               if (isAktif) ...[
                 _actionTile(Icons.edit, 'Edit', colorPrimary, () => notifier.pilihAksi('edit')),
+                if ((notifier.selectedTeller?.hrmEmployeeId ?? '').isNotEmpty)
+                  _actionTile(Icons.sync, 'Perbarui Kode Kantor dari HRIS', Colors.teal, () {
+                    final teller = notifier.selectedTeller!;
+                    notifier.closeDrawer();
+                    notifier.perbaruiKantorDariHris(teller);
+                  }),
                 _actionTile(Icons.lock_reset, 'Reset Password', Colors.blue, () => notifier.pilihAksi('resetPassword')),
                 _actionTile(Icons.block, 'Blokir', Colors.orange, () => notifier.pilihAksi('blokir')),
                 _actionTile(Icons.delete_outline, 'Hapus', Colors.red, () => notifier.pilihAksi('hapus')),
@@ -340,9 +348,189 @@ class DataTellerPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
+                // ── Relasi Karyawan HRIS (TypeAhead) - HANYA UNTUK TAMBAH ──
+                if (isTambah) ...[
+                  const Text('Relasi Karyawan HRIS *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  TypeAheadField<HrmEmployeeModel>(
+                    controller: notifier.hrmSearchController,
+                    debounceDuration: const Duration(milliseconds: 400),
+                    suggestionsCallback: (search) => notifier.searchHrmEmployee(search),
+                    itemBuilder: (context, emp) => ListTile(
+                      dense: true,
+                      title: Text(emp.name, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                        [if (emp.nik != null) 'NIK: ${emp.nik}', if (emp.department != null) emp.department!].join(' | '),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                    onSelected: (emp) => notifier.selectHrmEmployee(emp),
+                    emptyBuilder: (_) => const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Ketik minimal 2 karakter untuk mencari karyawan',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ),
+                    builder: (context, controller, focusNode) => TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: notifier.selectedHrmEmployee != null 
+                            ? notifier.selectedHrmEmployee!.name 
+                            : 'WAJIB: Cari karyawan HRIS terlebih dahulu',
+                        prefixIcon: const Icon(Icons.search),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: notifier.selectedHrmEmployee != null
+                            ? const Icon(Icons.check_circle, size: 18, color: Color(0xff2E7D32))
+                            : const Icon(Icons.warning, size: 18, color: Colors.orange),
+                      ),
+                    ),
+                  ),
+                  if (notifier.manualErrors['hrmEmployee'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        notifier.manualErrors['hrmEmployee']!,
+                        style: const TextStyle(fontSize: 12, color: Colors.red),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Nama Teller - READONLY saat EDIT, bisa diisi dari HRIS saat TAMBAH
+                _fieldLabel('Nama Teller *'),
+                TextFormField(
+                  controller: notifier.namaTellerCtrl,
+                  readOnly: isEdit || (isTambah && notifier.hrmEmployeeSelected),
+                  decoration: _inputDecoration(
+                    isEdit ? 'Nama tidak dapat diubah' : 'Nama Teller',
+                    fillColor: (isEdit || (isTambah && notifier.hrmEmployeeSelected)) ? Colors.grey.shade100 : Colors.white,
+                  ).copyWith(
+                    errorText: notifier.manualErrors['namaTeller'],
+                    suffixIcon: isEdit || (isTambah && notifier.hrmEmployeeSelected)
+                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                        : null,
+                  ),
+                  validator: null,
+                ),
+                const SizedBox(height: 16),
+
+                // ── Kantor ──
+                _fieldLabel('Kantor *'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isEdit) ...[
+                      // EDIT: Kantor READ-ONLY, hanya bisa update via tombol
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade400),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${notifier.selectedKantor?.kdKantor ?? '-'} - ${notifier.selectedKantor?.namaKantor ?? '-'}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ),
+                                  const Icon(Icons.lock, size: 16, color: Colors.grey),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton(
+                            onPressed: notifier.isUpdatingKantor ? null : notifier.updateKantorFromHris,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorPrimary,
+                              foregroundColor: colortextwhite,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                            child: notifier.isUpdatingKantor
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: colortextwhite),
+                                  )
+                                : const Text('Update', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    ] else if (isTambah && notifier.hrmOfficeFixed && notifier.selectedKantor != null) ...[
+                      // TAMBAH: Kantor dari HRIS (READONLY)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${notifier.selectedKantor!.kdKantor} - ${notifier.selectedKantor!.namaKantor}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ] else if (isTambah) ...[
+                      // TAMBAH: Dropdown Kantor (jika tidak dari HRIS)
+                      DropdownButtonFormField<KantorDummy>(
+                        value: notifier.selectedKantor,
+                        isExpanded: true,
+                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                        ),
+                        items: notifier.listKantor.map((k) => DropdownMenuItem(
+                          value: k,
+                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
+                        )).toList(),
+                        onChanged: isReadOnly ? null : notifier.setSelectedKantor,
+                        validator: null,
+                      ),
+                    ],
+                    if (notifier.manualErrors['kantor'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 12),
+                        child: Text(
+                          notifier.manualErrors['kantor']!,
+                          style: const TextStyle(fontSize: 12, color: Colors.red),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // User ID (hanya untuk tambah)
                 if (isTambah) ...[
-                  _fieldLabel('User ID'),
+                  _fieldLabel('User ID *'),
                   TextFormField(
                     controller: notifier.userIdCtrl,
                     textCapitalization: TextCapitalization.characters,
@@ -355,25 +543,9 @@ class DataTellerPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Nama Teller
-                _fieldLabel('Nama Teller'),
-                TextFormField(
-                  controller: notifier.namaTellerCtrl,
-                  readOnly: isReadOnly,
-                  decoration: _inputDecoration(
-                    'Nama Teller',
-                    fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                  ).copyWith(
-                    errorText: notifier.manualErrors['namaTeller'],
-                  ),
-                  validator: null,
-                ),
-                _fieldNote('* Nama tidak boleh mengandung karakter spesial (!@#\$%^&* dll)'),
-                const SizedBox(height: 16),
-
                 // Password (tambah mode)
                 if (isTambah) ...[
-                  _fieldLabel('Password'),
+                  _fieldLabel('Password *'),
                   TextFormField(
                     controller: notifier.passwordCtrl,
                     obscureText: notifier.obscure,
@@ -424,7 +596,7 @@ class DataTellerPage extends StatelessWidget {
                 ],
 
                 // No SBB + tombol verifikasi
-                _fieldLabel('No SBB'),
+                _fieldLabel('No SBB *'),
                 Row(children: [
                   Expanded(
                     flex: 3,
@@ -469,7 +641,7 @@ class DataTellerPage extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Nama SBB (readonly dengan validator)
-                _fieldLabel('Nama SBB'),
+                _fieldLabel('Nama SBB *'),
                 TextFormField(
                   controller: notifier.namaSbbCtrl,
                   readOnly: true,
@@ -498,46 +670,6 @@ class DataTellerPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Kantor
-                _fieldLabel('Kantor'),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<KantorDummy>(
-                      value: notifier.selectedKantor,
-                      isExpanded: true,
-                      hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.red),
-                        ),
-                      ),
-                      items: notifier.listKantor.map((k) => DropdownMenuItem(
-                        value: k,
-                        child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
-                      )).toList(),
-                      onChanged: isReadOnly ? null : notifier.setSelectedKantor,
-                      validator: null,
-                    ),
-                    if (notifier.manualErrors['kantor'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 12),
-                        child: Text(
-                          notifier.manualErrors['kantor']!,
-                          style: const TextStyle(fontSize: 12, color: Colors.red),
-                        ),
-                      ),
-                  ],
-                ),
                 const SizedBox(height: 16),
 
                 // BATCH (untuk tambah dan edit)
@@ -673,7 +805,6 @@ class DataTellerPage extends StatelessWidget {
     final firstErrorKey = validationResult['firstErrorKey'] as String?;
     
     if (!isValid) {
-      // Scroll ke field error pertama
       if (firstErrorKey != null) {
         await _scrollToError(notifier, firstErrorKey);
       }
@@ -686,12 +817,11 @@ class DataTellerPage extends StatelessWidget {
   }
 
   Future<void> _scrollToError(DataTellerNotifier notifier, String errorKey) async {
-    // Beri waktu sejenak untuk rebuild
     await Future.delayed(const Duration(milliseconds: 100));
     
-    // Scroll ke posisi error berdasarkan key
     double targetOffset = 0;
     switch (errorKey) {
+      case 'hrmEmployee':
       case 'userId':
       case 'namaTeller':
       case 'password':
@@ -993,26 +1123,6 @@ class DataTellerPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: colorPrimary, width: 1.5),
       ),
-    );
-  }
-}
-class _CurrencyInputFormatter extends TextInputFormatter {
-  final _formatter = NumberFormat('#,###', 'id_ID');
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digitsOnly.isEmpty) {
-      return newValue.copyWith(text: '');
-    }
-    final number = int.tryParse(digitsOnly) ?? 0;
-    final formatted = _formatter.format(number);
-    return newValue.copyWith(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

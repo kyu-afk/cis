@@ -73,7 +73,7 @@ class RegenerateMpinNotifier extends ChangeNotifier {
     if (_collectorId.isEmpty || _noSbb.isEmpty || _kdKantor.isEmpty) {
       _showInfoDialog(
         title: 'Peringatan',
-        message: 'Data petugas belum lengkap',
+        message: 'Data kolektor belum lengkap',
         isSuccess: false,
       );
       return;
@@ -100,7 +100,7 @@ class RegenerateMpinNotifier extends ChangeNotifier {
       excludedCollectorIds.add(_collectorId);
       _showResultDialog(
         isSuccess: true,
-        message: 'MPIN berhasil diregenerate untuk petugas $_namaPetugas.\n.'
+        message: 'MPIN berhasil diregenerate untuk kolektor $_namaPetugas.\n.'
       );
     } else {
       _showResultDialog(
@@ -132,7 +132,7 @@ class RegenerateMpinNotifier extends ChangeNotifier {
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 16),
-              const Text('Apakah Anda yakin ingin meregenerate MPIN petugas ini?',
+              const Text('Apakah Anda yakin ingin meregenerate MPIN kolektor ini?',
                   style: TextStyle(fontSize: 14)),
               const SizedBox(height: 8),
               Container(
@@ -167,7 +167,7 @@ class RegenerateMpinNotifier extends ChangeNotifier {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Regenerate MPIN akan menghasilkan MPIN baru untuk petugas.',
+                        'Regenerate MPIN akan menghasilkan MPIN baru untuk kolektor.',
                         style: TextStyle(fontSize: 11, color: Color(0xFF3B6D11)),
                       ),
                     ),

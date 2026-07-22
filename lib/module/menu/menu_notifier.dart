@@ -99,28 +99,45 @@ class MenuNotifier extends ChangeNotifier {
   /// Dipanggil oleh IdleLogoutService saat timeout, tab di-close, atau
   /// tab terlalu lama di background.
   ///
-  /// Urutan: hit API logout → clear local prefs → redirect ke /login.
-  /// Jika API gagal tetap clear prefs dan redirect agar user tidak
-  /// terjebak di sesi yang sudah tidak valid.
+  /// PATCH: urutan dibalik jadi clear local prefs DULU, baru hit API logout.
+  /// Sebelumnya API logout di-await duluan — pada skenario tab di-close,
+  /// browser cuma kasih waktu sangat singkat ke event beforeunload/pagehide
+  /// untuk beres, jadi kalau request API (network round-trip) belum selesai,
+  /// baris `await Pref().hapus()` di baliknya TIDAK PERNAH jalan karena tab
+  /// keburu ditutup duluan. Akibatnya localStorage masih ada data sesi lama,
+  /// dan pas tab dibuka/refresh lagi, LoginNotifier.getProfile() mengira user
+  /// masih login lalu diam-diam redirect ke MenuPage tanpa update address
+  /// bar (karena pakai Navigator.pushAndRemoveUntil biasa, bukan named route)
+  /// — makanya URL kelihatan di /login tapi isinya masih menu.
+  ///
+  /// Clear local prefs duluan (cepat, murni local storage) memastikan sesi
+  /// lokal selalu bersih walau proses selanjutnya (hit API / redirect)
+  /// keburu terpotong karena tab ditutup.
   Future<void> _autoLogout() async {
     if (kDebugMode) print("[MenuNotifier] Auto-logout dipicu");
 
-    // Hit API logout supaya session di server ikut ter-terminate.
-    if (!TemplateConfig.skipLogin && users != null) {
+    final logoutUsers = users;
+
+    // 1. Clear sesi lokal DULUAN — ini yang paling kritis dan harus selesai
+    // walau tab keburu ditutup.
+    await Pref().hapus();
+
+    // 2. Hit API logout supaya session di server ikut ter-terminate.
+    // Best-effort: tidak menghalangi apa pun kalau gagal/timeout/terpotong
+    // karena tab ditutup — sesi lokal sudah aman dibersihkan di langkah 1.
+    if (!TemplateConfig.skipLogin && logoutUsers != null) {
       try {
         await AuthRepository.logOut(
           NetworkURL.logout(),
-          users!.bprId,
-          users!.usersId,
-          users!.usersId,
+          logoutUsers.bprId,
+          logoutUsers.usersId,
+          logoutUsers.usersId,
         );
       } catch (e) {
-        // Abaikan error jaringan — tetap lanjut hapus sesi lokal.
+        // Abaikan error jaringan — sesi lokal sudah terlanjur bersih.
         if (kDebugMode) print("[MenuNotifier] _autoLogout API error (ignored): $e");
       }
     }
-
-    await Pref().hapus();
 
     final nav = ApiClient.navigatorKey.currentState;
     nav?.pushNamedAndRemoveUntil("/login", (route) => false);

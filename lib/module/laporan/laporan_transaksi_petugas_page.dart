@@ -264,7 +264,7 @@ class _LaporanTransaksiPetugasNotifier extends ChangeNotifier {
           }
         }
       } catch (e) {
-        if (kDebugMode) print('Error get nama petugas: $e');
+        if (kDebugMode) print('Error get nama kolektor: $e');
       }
     }
 
@@ -365,7 +365,7 @@ class _DetailPopup extends StatelessWidget {
                 children: [
                   _detailRow('No HP', data['nohp'] ?? '-'),
                   const SizedBox(height: 8),
-                  _detailRow('Nama Petugas', data['nama_petugas'] ?? '-'),
+                  _detailRow('Nama Kolektor', data['nama_petugas'] ?? '-'),
                   const SizedBox(height: 8),
                   _detailRow('Kode Transaksi', data['trx_code'] ?? '-'),
                   const SizedBox(height: 8),
@@ -477,7 +477,7 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
       color: colorPrimary,
       child: const Text(
-        'Laporan Transaksi Petugas',
+        'Laporan Transaksi Kolektor',
         style: TextStyle(color: colortextwhite, fontSize: 24, fontWeight: FontWeight.w700),
       ),
     );

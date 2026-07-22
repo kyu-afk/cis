@@ -125,7 +125,7 @@ class CetakMpinPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "Nama Petugas",
+            "Nama Kolektor",
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
@@ -137,7 +137,7 @@ class CetakMpinPage extends StatelessWidget {
           key: ValueKey(notifier.refreshKey),
           controller: notifier.namaPetugasInput,
           onPetugasSelected: notifier.onPetugasSelected,
-          hintText: 'Cari nama petugas...',
+          hintText: 'Cari nama kolektor...',
           additionalFilter: (petugas) {
             final mpin = petugas.mpin ?? '';
             final mpinCetak = petugas.mpinCetak?.toUpperCase() ?? '';
@@ -161,7 +161,7 @@ class CetakMpinPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            "Data Petugas",
+            "Data Kolektor",
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
@@ -171,7 +171,7 @@ class CetakMpinPage extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(color: Color(0xffDCE3DF), height: 1),
           const SizedBox(height: 20),
-          _infoRow("Nama Petugas", notifier.namaPetugasResult.text),
+          _infoRow("Nama Kolektor", notifier.namaPetugasResult.text),
           const SizedBox(height: 20),
           const Divider(color: Color(0xffF0F0F0), height: 1),
           const SizedBox(height: 20),
@@ -183,7 +183,7 @@ class CetakMpinPage extends StatelessWidget {
           const SizedBox(height: 20),
           const Divider(color: Color(0xffF0F0F0), height: 1),
           const SizedBox(height: 20),
-          _infoRow("No SBB Petugas", notifier.noSbbPetugasResult.text),
+          _infoRow("No SBB Kolektor", notifier.noSbbPetugasResult.text),
           const SizedBox(height: 20),
           const Divider(color: Color(0xffF0F0F0), height: 1),
           const SizedBox(height: 20),
