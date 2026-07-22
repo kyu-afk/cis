@@ -315,8 +315,19 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () => _confirmCetakUlang(context, n, item),
+                icon: const Icon(Icons.print_outlined, color: colorPrimary),
+                label: const Text('Cetak Ulang', style: TextStyle(color: colorPrimary, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: colorPrimary),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
               if (!isDiberikan) ...[
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: n.hapus,
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -396,6 +407,27 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
             ),
           ),
       ],
+    );
+  }
+
+  void _confirmCetakUlang(BuildContext context, ModalKolektorNotifier n, Map<String, dynamic> item) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cetak Ulang'),
+        content: const Text('Yakin ingin mencetak ulang struk untuk data ini?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: colorPrimary),
+            onPressed: () {
+              Navigator.pop(context);
+              n.printUlang(item);
+            },
+            child: const Text('Cetak', style: TextStyle(color: colortextwhite)),
+          ),
+        ],
+      ),
     );
   }
 

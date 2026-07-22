@@ -1,5 +1,6 @@
 export 'sandi_bank_model.dart';
 export 'kantor_model.dart';
+export 'hrm_employee_model.dart';
 export 'users_model.dart';
 export 'users_access_model.dart';
 export 'fasilitas_add_model.dart';

@@ -126,11 +126,18 @@ class NetworkURL {
 
   // ---------- Legacy CMS (tetap) ----------
   static String getUsersAccess() => "$url_go/user_search";
-  static String getListKantorAccess() => "$url_go/kantor";
-  static String insertKantorCMS() => "$url_go/kantor";
-  static String updateKantorCMS() => "$url_go/kantor";
-  static String deleteKantorCMS() => "$url_go/kantor";
   static String getListFasilitas() => "$url_go/master_menu";
+
+  // ---------- HRM (kantor & karyawan bersumber dari HRIS, universal semua aplikasi) ----------
+  // PATCH: kantor tidak lagi CRUD manual/lokal — disamakan dengan MEDFO, kantor & relasi
+  // karyawan wajib melalui inquiry HRM (hr.medtrans.id). Lihat kantor_notifier.dart &
+  // users_access_notifier.dart.
+  static String hrmInquiryKantor() => "$url_go/hrm/inquiry_kantor";
+  static String hrmInquiryEmployee() => "$url_go/hrm/inquiry_employee";
+  // getListKantorAccess() dipertahankan sebagai alias supaya semua pemanggil lama
+  // (data_teller, data_petugas, buka_tutup_transaksi, laporan, dst) otomatis ikut
+  // bersumber dari HRM tanpa perlu diubah satu-satu.
+  static String getListKantorAccess() => hrmInquiryKantor();
   static String inquiryAccount() => "$url_go/inquiry_account";
   static String accountSearch() => "$url_go/account_search";
   static String nasabahPhotoBridge() => "$url_go/nasabah-photo-bridge";

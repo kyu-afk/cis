@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/fasilitas_model.dart';
@@ -54,6 +55,116 @@ class UsersAccessNotifier extends ChangeNotifier {
   UsersAccessModel? selectedUser;
   KantorItem? selectedKantor;
   String? drawerMode;
+
+  // ==================== HRM EMPLOYEE TYPEAHEAD ====================
+  // Samakan dengan MEDFO: relasi user -> karyawan HRIS wajib via inquiry, kantor
+  // ikut terkunci mengikuti kantor karyawan tersebut di HRIS.
+  HrmEmployeeModel? selectedHrmEmployee;
+  final TextEditingController hrmSearchController = TextEditingController();
+
+  bool get hrmEmployeeSelected => drawerMode == 'tambah' && selectedHrmEmployee != null;
+
+  bool get hrmOfficeFixed =>
+      selectedHrmEmployee?.office != null &&
+      (selectedHrmEmployee!.office!.branchCode?.isNotEmpty ?? false);
+
+  Future<void> selectHrmEmployee(HrmEmployeeModel emp) async {
+    final currentUserId = selectedUser?.userid?.toUpperCase() ?? '';
+    UsersAccessModel? duplicate;
+    for (final u in _list) {
+      final uid = (u.hrmEmployeeId ?? '').trim();
+      if (uid.isNotEmpty && uid == emp.id && u.userid?.toUpperCase() != currentUserId) {
+        duplicate = u;
+        break;
+      }
+    }
+
+    if (duplicate != null) {
+      hrmSearchController.text = selectedHrmEmployee?.name ?? '';
+      notifyListeners();
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Tidak Dapat Mendaftar'),
+            content: Text(
+              "Karyawan '${emp.name}' sudah terhubung ke akun '${duplicate!.namauser}' (${duplicate.userid}).\n\nSatu karyawan hanya dapat memiliki satu akun pengguna.",
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    selectedHrmEmployee = emp;
+    hrmSearchController.text = emp.name;
+    ctrlNama.text = emp.name;
+
+    _applyHrmOffice(emp);
+    notifyListeners();
+  }
+
+  void _applyHrmOffice(HrmEmployeeModel emp) {
+    if (emp.office == null || (emp.office!.branchCode?.isEmpty ?? true)) return;
+    final officeCode = emp.office!.branchCode!;
+    final matched = _listKantor.where((k) => k.kdKantor == officeCode).firstOrNull ??
+        KantorItem(officeCode, emp.office!.name ?? officeCode);
+    selectedKantor = matched;
+    if (_manualErrors.containsKey('kantor')) _manualErrors.remove('kantor');
+  }
+
+  void clearHrmEmployee() {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+    notifyListeners();
+  }
+
+  Future<void> _loadHrmEmployeeForEdit(UsersAccessModel u) async {
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
+
+    final empId = u.hrmEmployeeId;
+    if (empId == null || empId.isEmpty) return;
+
+    final name = (u.namauser ?? '').trim();
+    if (name.isEmpty) return;
+
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: name,
+      );
+      for (final raw in results) {
+        final emp = HrmEmployeeModel.fromJson(raw);
+        if (emp.id == empId) {
+          selectedHrmEmployee = emp;
+          hrmSearchController.text = emp.name;
+          _applyHrmOffice(emp);
+          break;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('_loadHrmEmployeeForEdit: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<List<HrmEmployeeModel>> searchHrmEmployee(String search) async {
+    if (search.trim().length < 2 || _sessionUser == null) return [];
+    try {
+      final results = await UsersAccessRepository.searchHrmEmployee(
+        bprId: _sessionUser!.bprId,
+        search: search.trim(),
+      );
+      return results.map((e) => HrmEmployeeModel.fromJson(e)).toList();
+    } catch (e) {
+      if (kDebugMode) print('ERROR searchHrmEmployee: $e');
+      return [];
+    }
+  }
 
   final searchCtrl = TextEditingController();
   String _searchKeyword = '';
@@ -247,6 +358,8 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlPass.clear();
     ctrlTgl.clear();
     isChangePassword = false;
+    selectedHrmEmployee = null;
+    hrmSearchController.clear();
     formKey.currentState?.reset();
     notifyListeners();
   }
@@ -271,6 +384,7 @@ class UsersAccessNotifier extends ChangeNotifier {
         if (match != null) _selectedFasilitas.add(match);
       }
     }
+    unawaited(_loadHrmEmployeeForEdit(u));
     notifyListeners();
   }
 
@@ -796,6 +910,7 @@ class UsersAccessNotifier extends ChangeNotifier {
       kdKantor: selectedKantor!.kdKantor,
       tglKadaluarsa: ctrlTgl.text.trim(),
       stsAktif: 'A',
+      hrmEmployeeId: selectedHrmEmployee?.id,
       listFasilitas: fasJson,
     );
 
@@ -1041,6 +1156,7 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlPass.dispose();
     ctrlTgl.dispose();
     searchCtrl.dispose();
+    hrmSearchController.dispose();
     super.dispose();
   }
 }

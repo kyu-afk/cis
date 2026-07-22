@@ -2,6 +2,10 @@ import 'package:cis_menu/repository/collector_repository.dart';
 import 'package:cis_menu/repository/modal_kolektor_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import '../../pref/pref.dart';
 
 class ModalKolektorNotifier extends ChangeNotifier {
   final BuildContext context;
@@ -155,6 +159,13 @@ class ModalKolektorNotifier extends ChangeNotifier {
         closeDrawer();
         await _load();
         _snack('Modal berhasil ditambahkan', isError: false);
+        await _printStruk(
+          nama: selectedPetugasNama ?? '',
+          noHp: selectedPetugasHp ?? '',
+          nominal: nominalValue,
+          keterangan: keteranganCtrl.text.trim(),
+          nodokumen: DateTime.now().microsecondsSinceEpoch.toString(),
+        );
       } else {
         _snack(res['message'] ?? 'Gagal menyimpan', isError: true);
       }
@@ -206,6 +217,99 @@ class ModalKolektorNotifier extends ChangeNotifier {
   }
 
   String fmtStatus(String? s) => s == 'DIBERIKAN' ? 'Diberikan' : 'Menunggu';
+
+  // ── Cetak Struk ──────────────────────────────────────────────────────────
+  Future<void> _printStruk({
+    required String nama,
+    required String noHp,
+    required double nominal,
+    required String keterangan,
+    required String nodokumen,
+  }) async {
+    final tglCetak = DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
+    final formattedNominal = fmt.format(nominal);
+    final session = await Pref().getUsers();
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
+        build: (pw.Context context) => [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'STRUK MODAL KOLEKTOR',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+                ),
+              ),
+              pw.SizedBox(height: 24),
+              pw.Divider(height: 1, color: PdfColors.black),
+              pw.SizedBox(height: 24),
+              _buildInfoRow('No. Dokumen', nodokumen),
+              pw.SizedBox(height: 12),
+              _buildInfoRow('Nama Petugas', nama),
+              pw.SizedBox(height: 12),
+              _buildInfoRow('No HP', noHp),
+              pw.SizedBox(height: 12),
+              _buildInfoRow('Nominal', formattedNominal),
+              if (keterangan.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                _buildInfoRow('Keterangan', keterangan),
+              ],
+              pw.SizedBox(height: 12),
+              _buildInfoRow('Tanggal', tglCetak),
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    children: [
+                      pw.Container(width: 200, height: 1, color: PdfColors.grey300),
+                      pw.SizedBox(height: 8),
+                      pw.Text('Pejabat', style: pw.TextStyle(fontSize: 10)),
+                      pw.SizedBox(height: 70),
+                      pw.Text(session.usersId, style: pw.TextStyle(fontSize: 8)),
+                      pw.Text('_____________________', style: pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Struk_Modal_Kolektor_${nama.replaceAll(' ', '_')}.pdf',
+    );
+  }
+
+  pw.Widget _buildInfoRow(String label, String value) {
+    return pw.Row(
+      children: [
+        pw.SizedBox(width: 120, child: pw.Text(label, style: pw.TextStyle(fontSize: 12, color: PdfColors.black))),
+        pw.Text(': ', style: pw.TextStyle(fontSize: 12, color: PdfColors.black)),
+        pw.Text(value.isEmpty ? '-' : value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+      ],
+    );
+  }
+
+  /// Cetak ulang struk dari item yang sudah ada di daftar
+  Future<void> printUlang(Map<String, dynamic> item) async {
+    await _printStruk(
+      nama: item['petugas_nama'] ?? '-',
+      noHp: item['petugas_hp'] ?? '-',
+      nominal: item['nominal'] is num ? (item['nominal'] as num).toDouble() : double.tryParse(item['nominal']?.toString() ?? '') ?? 0,
+      keterangan: item['keterangan'] ?? '',
+      nodokumen: item['id']?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString(),
+    );
+  }
 
   void _snack(String msg, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(

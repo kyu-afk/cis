@@ -267,6 +267,7 @@ class UsersAccessRepository {
     required String kdKantor,
     required String tglKadaluarsa,
     required String stsAktif,
+    String? hrmEmployeeId,
     required String listFasilitas,
   }) async {
     try {
@@ -300,6 +301,7 @@ class UsersAccessRepository {
         "kdkantor": kdKantor,
         "tglexp": tglKadaluarsa,
         "lvluser": 1,
+        "hrm_employee_id": hrmEmployeeId ?? "",
         "akses": aksesList,
       };
 
@@ -564,6 +566,11 @@ class UsersAccessRepository {
   }
 
   // ==================== GET LIST KANTOR ====================
+  // PATCH: kantor kini bersumber dari HRM (samakan dengan MEDFO), bukan lagi tabel
+  // kantor lokal. Body & endpoint sudah HRM (lihat NetworkURL.getListKantorAccess()),
+  // tapi return contract dipertahankan {value, message, kantor:[{kd_kantor, nama_kantor}]}
+  // supaya seluruh pemanggil lama (data_teller, data_petugas, buka_tutup_transaksi,
+  // laporan, kantor, users_access) tidak perlu diubah satu per satu.
   static Future<Map<String, dynamic>> getListKantor({
     required String url,
     required String userId,
@@ -571,10 +578,10 @@ class UsersAccessRepository {
   }) async {
     try {
       final dio = _dioLegacy();
-      final body = {"type": "all", "userlogin": userId, "bpr_id": bprId, "term": "web"};
+      final body = {"bpr_id": bprId};
       if (kDebugMode) {
         print("=========================================");
-        print("📞 GET LIST KANTOR");
+        print("📞 GET LIST KANTOR (HRM)");
         print("🌐 URL: $url");
         print("📤 BODY: $body");
         print("=========================================");
@@ -582,22 +589,50 @@ class UsersAccessRepository {
       final response = await dio.post(url, data: body);
       final decoded = _safeDecode(response.data);
       if (kDebugMode) {
-        print("📥 RESPONSE KANTOR: $decoded");
+        print("📥 RESPONSE KANTOR (HRM): $decoded");
         print("=========================================");
       }
-      List<dynamic> kantorList = [];
-      final int value = _mapValueFromGo(decoded);
-      if (value == 1) {
-        if (decoded['data'] != null && decoded['data'] is List) {
-          kantorList = decoded['data'] as List<dynamic>;
-        } else if (decoded['data'] is Map && decoded['data']['data'] is List) {
-          kantorList = decoded['data']['data'] as List<dynamic>;
-        }
-      }
-      return {"value": value, "message": _mapMessageFromGo(decoded), "kantor": kantorList};
+      final officesRaw = decoded?['data']?['data']?['offices'] as List<dynamic>? ?? [];
+      final kantorList = officesRaw.map((o) {
+        final m = Map<String, dynamic>.from(o as Map);
+        return {
+          "bpr_id": bprId,
+          "kd_kantor": m['branch_code']?.toString() ?? m['kd_kantor']?.toString() ?? '',
+          "nama_kantor": m['name']?.toString() ?? m['nama_kantor']?.toString() ?? '',
+          "hrm_id": m['id']?.toString(),
+          "branch_type": m['branch_type']?.toString(),
+        };
+      }).toList();
+      return {"value": 1, "message": "", "kantor": kantorList};
     } catch (e) {
-      if (kDebugMode) print("❌ ERROR GET LIST KANTOR: $e");
-      return {"value": 0, "message": _extractError(e), "kantor": []};
+      if (kDebugMode) print('ERROR getListKantor (HRM): $e');
+      return {"value": 0, "message": e.toString(), "kantor": []};
+    }
+  }
+
+  // ==================== HRM EMPLOYEE SEARCH ====================
+  static Future<List<Map<String, dynamic>>> searchHrmEmployee({
+    required String bprId,
+    required String search,
+  }) async {
+    try {
+      final dio = _dioLegacy();
+      final response = await dio.post(
+        NetworkURL.hrmInquiryEmployee(),
+        data: {"bpr_id": bprId, "search": search},
+      );
+      final decoded = _safeDecode(response.data);
+      final inner = decoded?['data']?['data'];
+      List<dynamic> employees = [];
+      if (inner is Map) {
+        employees = inner['employees'] as List<dynamic>? ?? [];
+      } else if (decoded?['data'] is List) {
+        employees = decoded!['data'] as List<dynamic>;
+      }
+      return employees.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      if (kDebugMode) print('ERROR searchHrmEmployee: $e');
+      return [];
     }
   }
 

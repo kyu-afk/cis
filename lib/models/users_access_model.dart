@@ -6,6 +6,7 @@ class UsersAccessModel {
   String? kdbank;
   String? kdkantor;
   String? namaKantor;  // TAMBAHKAN FIELD UNTUK NAMA KANTOR
+  String? hrmEmployeeId;
   String? tglexp;
   String? stsaktif;
   String? stsrec;
@@ -42,6 +43,7 @@ class UsersAccessModel {
     this.kdbank,
     this.kdkantor,
     this.namaKantor,  // TAMBAHKAN
+    this.hrmEmployeeId,
     this.tglexp,
     this.stsaktif,
     this.stsrec,
@@ -103,6 +105,7 @@ class UsersAccessModel {
       kdbank: (json['kdbank'] ?? json['bpr_id'] ?? json['BprID'])?.toString(),
       kdkantor: (json['kdkantor'] ?? json['kd_kantor'] ?? json['KdKantor'])?.toString(),
       namaKantor: (json['nama_kantor'] ?? json['namakantor'] ?? json['NamaKantor'])?.toString(),
+      hrmEmployeeId: (json['hrm_employee_id'] ?? json['HrmEmployeeId'])?.toString(),
       tglexp: (json['tglexp'] ?? json['TglExp'] ?? json['last_login'] ?? json['LastLogin'])?.toString(),
       stsaktif: (json['stsaktif'] ?? json['StsAktif'])?.toString(),
       // stsrec: backend CMS menggunakan kolom "stsaktif" (A/B/C/D).
@@ -144,6 +147,7 @@ class UsersAccessModel {
       'kdbank': kdbank,
       'kdkantor': kdkantor,
       'nama_kantor': namaKantor,  // TAMBAHKAN
+      'hrm_employee_id': hrmEmployeeId,
       'tglexp': tglexp,
       'stsaktif': stsaktif,
       'stsrec': stsrec,
