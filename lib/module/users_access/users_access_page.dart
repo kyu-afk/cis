@@ -67,6 +67,52 @@ class UsersAccessPage extends StatelessWidget {
     );
   }
 
+  Widget _buildSortDropdown(UsersAccessNotifier notifier) {
+    // value gabungan "field:asc" / "field:desc" supaya bisa 1 dropdown
+    // untuk 6 opsi (Nama ↑↓, Kantor ↑↓, Tgl Kadaluarsa ↑↓).
+    final current = notifier.sortField == null
+        ? null
+        : '${notifier.sortField}:${notifier.sortAscending ? 'asc' : 'desc'}';
+
+    const options = [
+      {'value': 'nama:asc', 'label': 'Nama ↑'},
+      {'value': 'nama:desc', 'label': 'Nama ↓'},
+      {'value': 'kantor:asc', 'label': 'Kantor ↑'},
+      {'value': 'kantor:desc', 'label': 'Kantor ↓'},
+      {'value': 'tglexp:asc', 'label': 'Tgl Kadaluarsa ↑'},
+      {'value': 'tglexp:desc', 'label': 'Tgl Kadaluarsa ↓'},
+    ];
+
+    return SizedBox(
+      width: 190,
+      child: DropdownButtonFormField<String>(
+        value: current,
+        isExpanded: true,
+        icon: const Icon(Icons.sort, size: 18),
+        hint: const Text('Urutkan', style: TextStyle(fontSize: 12)),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        items: options
+            .map((o) => DropdownMenuItem(
+                  value: o['value'],
+                  child: Text(o['label']!, style: const TextStyle(fontSize: 12)),
+                ))
+            .toList(),
+        onChanged: (v) {
+          if (v == null) {
+            notifier.clearSort();
+            return;
+          }
+          final parts = v.split(':');
+          notifier.setSort(parts[0], parts[1] == 'asc');
+        },
+      ),
+    );
+  }
+
   Widget _buildTable(UsersAccessNotifier notifier) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,6 +131,10 @@ class UsersAccessPage extends StatelessWidget {
                 ],
               ),
               const Spacer(),
+              if (notifier.showSortOptions) ...[
+                _buildSortDropdown(notifier),
+                const SizedBox(width: 10),
+              ],
               SizedBox(
                 width: 250,
                 child: TextField(
@@ -387,18 +437,20 @@ class UsersAccessPage extends StatelessWidget {
                 ],
 
                 // ── Nama Users ──
+                // READONLY (tambah maupun edit), hanya bisa terisi lewat
+                // pencarian HRIS di atas, tidak boleh diketik manual.
                 _fieldLabel('Nama Users *'),
                 TextFormField(
                   controller: notifier.ctrlNama,
-                  readOnly: isEdit || (isTambah && notifier.hrmEmployeeSelected),
+                  readOnly: true,
                   decoration: _inputDecoration(
-                    isEdit ? 'Nama tidak dapat diubah' : 'Nama lengkap user',
-                    fillColor: (isEdit || (isTambah && notifier.hrmEmployeeSelected)) ? Colors.grey.shade100 : Colors.white,
+                    isEdit
+                        ? 'Nama tidak dapat diubah'
+                        : 'Terisi otomatis setelah pilih karyawan HRIS di atas',
+                    fillColor: Colors.grey.shade100,
                   ).copyWith(
                     errorText: notifier.manualErrors['nama'],
-                    suffixIcon: isEdit || (isTambah && notifier.hrmEmployeeSelected)
-                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
-                        : null,
+                    suffixIcon: const Icon(Icons.lock, size: 16, color: Colors.grey),
                   ),
                   validator: null,
                 ),
@@ -499,31 +551,28 @@ class UsersAccessPage extends StatelessWidget {
                         ),
                       ),
                     ] else if (isTambah) ...[
-                      // TAMBAH: Dropdown Kantor (jika tidak dari HRIS dan bukan semua kantor)
-                      DropdownButtonFormField<KantorItem>(
-                        value: notifier.selectedKantor,
-                        isExpanded: true,
-                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
+                      // TAMBAH: Kantor HANYA dari HRIS (atau centang "Semua
+                      // Kantor" di atas) — sebelum karyawan HRIS dipilih,
+                      // tampilkan placeholder terkunci (tidak ada lagi opsi
+                      // pilih kantor manual).
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
                         ),
-                        items: notifier.listKantor.map((k) => DropdownMenuItem(
-                          value: k,
-                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
-                        )).toList(),
-                        onChanged: isReadOnly ? null : (v) => notifier.setSelectedKantor(v),
-                        validator: null,
+                        child: const Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Terisi otomatis setelah pilih karyawan HRIS di atas',
+                                style: TextStyle(fontSize: 13, color: Colors.grey),
+                              ),
+                            ),
+                            Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     ],
                     if (notifier.manualErrors['kantor'] != null)
@@ -534,7 +583,7 @@ class UsersAccessPage extends StatelessWidget {
                           style: const TextStyle(fontSize: 12, color: Colors.red),
                         ),
                       ),
-                    if (isTambah && !isEdit) ...[
+                    if (isTambah || isEdit) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [

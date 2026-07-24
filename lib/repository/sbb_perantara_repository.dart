@@ -4,6 +4,7 @@ import 'package:cis_menu/network/network.dart';
 import 'package:cis_menu/pref/pref.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cis_menu/utils/inquiry_filter.dart';
 
 class SbbPerantaraRepository {
   static Future<Dio> _dio() => ApiClient.buildProtected();
@@ -44,7 +45,13 @@ class SbbPerantaraRepository {
       final res = await dio.post(NetworkURL.inquirySbbPerantara(), data: body);
       final d = _decode(res.data);
       final raw = d['data'];
-      final List items = raw is Map ? (raw['items'] ?? raw['data'] ?? []) : (raw is List ? raw : []);
+      final List rawItems = raw is Map ? (raw['items'] ?? raw['data'] ?? []) : (raw is List ? raw : []);
+      final items = InquiryFilter.applyWithSession(
+        rawItems,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      );
       return {'value': _code(d), 'message': _msg(d), 'data': items, 'total': raw is Map ? (raw['total'] ?? items.length) : items.length};
     } catch (e) {
       return {'value': 0, 'message': _err(e), 'data': [], 'total': 0};

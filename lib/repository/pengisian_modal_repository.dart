@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class PengisianModalRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -95,6 +96,13 @@ class PengisianModalRepository {
         dataList = rawData;
         total    = dataList.length;
       }
+
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      );
 
       return {
         'value':   _mapCode(decoded),

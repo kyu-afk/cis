@@ -5,8 +5,6 @@ import '../../repository/users_access_repository.dart';
 import '../../network/network.dart';
 import '../../pref/pref.dart';
 import '../../utils/user_level.dart';
-import '../data_petugas/data_petugas_notifier.dart';
-import '../data_petugas/data_petugas_stsrec.dart';
 import '../../utils/colors.dart';
 
 class KantorDummy {
@@ -89,28 +87,44 @@ class BukaTutupPetugasNotifier extends ChangeNotifier {
       await _loadKantorList();
       _sessionUser = await Pref().getUsers();
 
-      final result = await CollectorRepository.inquiryCollector(limit: 200);
+      // PATCH: pakai inquiry dari DB LOKAL (inquiryCollectorDb), bukan
+      // inquiryCollector() biasa — supaya status buka/tutup yang ditampilkan
+      // akurat (kolom stsaktif disinkron langsung oleh tombol buka/tutup),
+      // bukan field 'transaksi_kolektor' dari middleware lama yang sudah
+      // tidak dipakai untuk fitur ini.
+      final result = await CollectorRepository.inquiryCollectorDb(limit: 500);
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
         final allPetugas = data
-            .map((e) => DataPetugasModel.fromJson(e as Map<String, dynamic>))
-            .where((p) => DataPetugasStsrec.isAktif(p))
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((p) {
+              final stsAktif = (p['stsaktif'] ?? '').toString().toUpperCase();
+              // Hanya tampilkan kolektor yang belum di-nonaktifkan/diblokir admin.
+              // 'A' (terbuka) dan 'C' (tertutup) sama-sama boleh tampil di sini
+              // karena keduanya statusnya masih aktif sebagai kolektor — bedanya
+              // cuma buka/tutup transaksi. 'B' (diblokir) tidak ditampilkan.
+              return stsAktif != 'B';
+            })
             .toList();
 
         // Filter per kode kantor untuk user biasa (lvl1)
         final petugasAktif = UserLevelHelper.applyKantorFilter(
           list: allPetugas,
           users: _sessionUser,
-          getKdKantor: (p) => p.kdKantor,
+          getKdKantor: (p) => (p['kd_kantor'] ?? '').toString(),
         );
 
-        _listPetugas = petugasAktif.map((p) => BukaTutupPetugasModel(
-          id: p.id ?? '',
-          nama: p.nama ?? '-',
-          noHp: p.noHp ?? '',
-          namaKantor: _getNamaKantor(p.kdKantor),
-          transaksiKolektor: p.transaksiKolektor ?? true,
-        )).toList();
+        _listPetugas = petugasAktif.map((p) {
+          final stsAktif = (p['stsaktif'] ?? '').toString().toUpperCase();
+          return BukaTutupPetugasModel(
+            id: (p['id'] ?? '').toString(),
+            nama: (p['nama'] ?? '-').toString(),
+            noHp: (p['nohp'] ?? '').toString(),
+            namaKantor: _getNamaKantor((p['kd_kantor'] ?? '').toString()),
+            // 'A' = terbuka, selain itu (mis. 'C') = tertutup.
+            transaksiKolektor: stsAktif == 'A',
+          );
+        }).toList();
 
         for (final p in _listPetugas) {
           _originalStatus[p.id] = p.transaksiKolektor;

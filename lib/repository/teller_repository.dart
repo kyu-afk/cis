@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import 'package:intl/intl.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class TellerRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -165,6 +166,69 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     }
   }
 
+  // ==================== INQUIRY DARI DB LOKAL ====================
+  // Dipakai KHUSUS untuk menu Buka/Tutup Transaksi Teller.
+  // Endpoint ini baca langsung dari database lokal (kolom stsaktif), yang
+  // disinkron langsung oleh bukaTransaksiTeller/tutupTransaksiTeller — jadi
+  // status di sini SELALU akurat, tidak seperti field 'transaksi_teller' dari
+  // inquiryTeller() biasa (yang datanya dari middleware/webservice lama).
+  //
+  // Status yang dikembalikan tiap item: 'stsaktif' = 'A' (terbuka) atau 'C' (tertutup).
+  static Future<Map<String, dynamic>> inquiryTellerDb({
+    String? filterNama,
+    String? filterKdKantor,
+    String? bprId,
+    int page = 1,
+    int limit = 500,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {
+        "nama": filterNama ?? "",
+        "bpr_id": bprId ?? session.bprId,
+        "kd_kantor": filterKdKantor ?? "",
+        "page": page,
+        "size": limit,
+        "sort": "nama",
+        "order": "asc",
+      };
+      if (kDebugMode) {
+        print("INQUIRY TELLER-DB URL: ${NetworkURL.inquiryTellerDb()}");
+        print("INQUIRY TELLER-DB BODY: ${jsonEncode(body)}");
+      }
+      final response = await dio.post(NetworkURL.inquiryTellerDb(), data: body);
+      final decoded = _safeDecode(response.data);
+      if (kDebugMode) print("INQUIRY TELLER-DB RESPONSE: $decoded");
+
+      final rawData = decoded['data'];
+      List<dynamic> dataList = [];
+      int total = 0;
+      if (rawData is Map) {
+        dataList = (rawData['list'] as List?) ?? [];
+        total = rawData['total'] ?? dataList.length;
+      }
+
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+        sentKodeKantor: (filterKdKantor ?? '').isNotEmpty,
+      );
+
+      return {
+        "value": _mapCode(decoded),
+        "message": _mapMessage(decoded),
+        "data": dataList,
+        "total": total,
+      };
+    } catch (e) {
+      if (kDebugMode) print("ERROR INQUIRY TELLER-DB: $e");
+      return {"value": 0, "message": _dioErrorMessage(e), "data": []};
+    }
+  }
+
   static Future<Map<String, dynamic>> inquiryTeller({
     String? filterNama,
     String? filterUserId,
@@ -218,6 +282,14 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         total    = dataList.length;
       }
 
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+        sentKodeKantor: (filterKdKantor ?? '').isNotEmpty,
+      );
+
       return {
         'value':   _mapCode(decoded),
         'message': _mapMessage(decoded),
@@ -244,6 +316,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String batch, 
     String? bprId,
     String? hrmEmployeeId,
+    bool hakOtor = false,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -261,6 +334,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nama_sbb':         namaSbb,
         'tanggal_expired':  tanggalExpired,
         'Batch': batch,
+        'hak_otor':         hakOtor ? 'Y' : 'N',
         'bpr_id':           bprId ?? session.bprId,
         'userlogin':        session.usersId,
         'term':             'WEB',
@@ -300,6 +374,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     String? password,
     String? bprId,
     String? hrmEmployeeId,
+    bool hakOtor = false,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -316,6 +391,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nama_sbb':         namaSbb,
         'tanggal_expired':  tanggalExpired,
         'Batch':            batch,
+        'hak_otor':         hakOtor ? 'Y' : 'N',
         'bpr_id':           bprId ?? session.bprId,
         'userlogin':        session.usersId,
         'term':             'WEB',

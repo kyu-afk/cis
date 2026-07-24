@@ -165,6 +165,29 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   // ==================== SEARCH ====================
   final searchCtrl = TextEditingController();
+
+  // ==================== SORT (khusus kode kantor 000) ====================
+  // Data Kolektor tidak punya tanggal kadaluarsa, jadi opsinya cuma nama & kantor.
+  String? _sortField; // 'nama' | 'kantor'
+  bool _sortAscending = true;
+
+  String? get sortField => _sortField;
+  bool get sortAscending => _sortAscending;
+
+  /// Hanya kode kantor 000 (kantor pusat) yang lihat data lintas-kantor,
+  /// jadi opsi sort ini cuma relevan/ditampilkan untuk mereka.
+  bool get showSortOptions => (_sessionUser?.kodeKantor ?? '') == '000';
+
+  void setSort(String field, bool ascending) {
+    _sortField = field;
+    _sortAscending = ascending;
+    _applyFilter();
+  }
+
+  void clearSort() {
+    _sortField = null;
+    _applyFilter();
+  }
   String _searchKeyword = '';
   Timer? _debounceTimer;
 
@@ -825,6 +848,25 @@ class DataPetugasNotifier extends ChangeNotifier {
                (p.kodePetugas ?? '').toLowerCase().contains(kw);
       }).toList();
     }
+    if (_sortField != null) {
+      final field = _sortField!;
+      final asc = _sortAscending;
+      _filteredList.sort((a, b) {
+        int cmp;
+        switch (field) {
+          case 'kantor':
+            cmp = getNamaKantor(a.kdKantor).toLowerCase().compareTo(getNamaKantor(b.kdKantor).toLowerCase());
+            break;
+          case 'nama':
+          default:
+            cmp = (a.nama ?? '').toLowerCase().compareTo((b.nama ?? '').toLowerCase());
+        }
+        return asc ? cmp : -cmp;
+      });
+      notifyListeners();
+      return;
+    }
+
     const _statusOrder = {'aktif': 0, 'blokir': 1};
     _filteredList.sort((a, b) {
       final sa = _statusOrder[DataPetugasStsrec.code(a)] ?? 9;
@@ -1049,6 +1091,13 @@ class DataPetugasNotifier extends ChangeNotifier {
         allValid = false;
       }
     }
+
+    // Karyawan HRIS (wajib untuk tambah) — nama & kantor cuma boleh terisi
+    // lewat pencarian ini, jadi kalau belum pilih, tolak submit di sini.
+    if (isTambah && selectedHrmEmployee == null) {
+      errors['hrmEmployee'] = 'Wajib pilih karyawan dari HRIS terlebih dahulu';
+      allValid = false;
+    }
     
     if (isTambah || isEdit) {
       final namaError = _validateNamaManual(namaCtrl.text.trim());
@@ -1059,6 +1108,14 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah) {
+      final passError = _validatePasswordManual(passwordCtrl.text.trim(), true);
+      if (passError != null) {
+        errors['password'] = passError;
+        allValid = false;
+      }
+    }
+
+    if (isEdit && isChangePassword) {
       final passError = _validatePasswordManual(passwordCtrl.text.trim(), true);
       if (passError != null) {
         errors['password'] = passError;

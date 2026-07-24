@@ -1,13 +1,8 @@
-// lib/module/laporan/laporan_transaksi_petugas_page.dart
+// lib/module/laporan/laporan_histori_transaksi_kolektor_page.dart
 //
-// Laporan Transaksi Kolektor — HANYA transaksi HARI INI.
-// Sumber data: GET https://api-collme.medtrans.id/api/transaksi/today
-// (langsung ke Collme, BUKAN lewat web_service_CIS).
-//
-// Endpoint ini WAJIB kirim userid & nohp milik kolektor — makanya tabel
-// HANYA terisi kalau kolektor sudah dipilih. Filter: Kolektor (wajib dipilih
-// dulu) & Status (default SEMUA, difilter di sisi client karena API tidak
-// menerima parameter status).
+// Histori Transaksi Kolektor — sama seperti "Laporan Transaksi Kolektor",
+// tapi tanpa dikunci ke hari ini. Filter: Kolektor, Status, & Tanggal
+// (opsional, default tidak ditentukan -> semua transaksi lama & hari ini muncul).
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -24,10 +19,10 @@ import '../../utils/widgets/searchable_dropdown_petugas.dart';
 import '../data_petugas/data_petugas_notifier.dart';
 
 // ==================== NOTIFIER ====================
-class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
+class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
   final BuildContext context;
 
-  LaporanTransaksiKolektorNotifier({required this.context}) {
+  HistoriTransaksiKolektorNotifier({required this.context}) {
     _init();
   }
 
@@ -37,48 +32,53 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
   UsersModel? _sessionUser;
 
   // ── Filter: Status ──
-  // Sesuai response asli: 'pending', 'failed'. Nilai untuk status berhasil
-  // diasumsikan 'success' — sesuaikan kalau ternyata beda begitu ada
-  // transaksi berhasil yang bisa dicek langsung dari API.
   String _selectedStatus = 'SEMUA';
   String get selectedStatus => _selectedStatus;
-  final List<String> statusOptions = const ['SEMUA', 'PENDING', 'BERHASIL', 'GAGAL'];
+  final List<String> statusOptions = const ['SEMUA', 'PENDING', 'POSTING', 'SETELMEN', 'TIMEOUT'];
 
   String _getStatusValue(String selectedStatus) {
     switch (selectedStatus) {
+      case 'TIMEOUT':
+        return 'timeout';
       case 'PENDING':
         return 'pending';
-      case 'BERHASIL':
-        return 'success';
-      case 'GAGAL':
-        return 'failed';
+      case 'POSTING':
+        return 'posting';
+      case 'SETELMEN':
+        return 'setelmen';
       default:
         return '';
     }
   }
 
-  String getNamaStatus(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'pending':
-        return 'PENDING';
-      case 'success':
-        return 'BERHASIL';
-      case 'failed':
-        return 'GAGAL';
-      default:
-        return (status ?? '-').toUpperCase();
-    }
-  }
-
-  // ── Filter: Kolektor (WAJIB dipilih — endpoint butuh userid & nohp) ──
+  // ── Filter: Kolektor (default: belum dipilih = semua kolektor) ──
   DataPetugasModel? _selectedKolektor;
   DataPetugasModel? get selectedKolektor => _selectedKolektor;
   final kolektorSearchCtrl = TextEditingController();
+
+  // ── Filter: Tanggal (default: TIDAK DITENTUKAN = semua tanggal tampil) ──
+  DateTime? _tanggal;
+  DateTime? get tanggal => _tanggal;
 
   int get totalData => _tableRows.length;
 
   List<Map<String, dynamic>> _tableRows = [];
   List<Map<String, dynamic>> get tableRows => _tableRows;
+
+  String getNamaStatus(String? status) {
+    switch (status?.toUpperCase()) {
+      case 'PENDING':
+        return 'PENDING';
+      case 'POSTING':
+        return 'POSTING';
+      case 'SETELMEN':
+        return 'SETELMEN';
+      case 'TIMEOUT':
+        return 'TIMEOUT';
+      default:
+        return status ?? '-';
+    }
+  }
 
   Future<void> _init() async {
     _sessionUser = await Pref().getUsers();
@@ -88,10 +88,9 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
   Future<void> loadData() async {
     if (_sessionUser == null) return;
 
-    // Tabel HANYA terisi kalau kolektor sudah dipilih — endpoint wajib
-    // kirim userid & nohp, jadi kalau belum ada kolektor, jangan hit API.
-    final kolektor = _selectedKolektor;
-    if (kolektor == null || (kolektor.userId ?? '').isEmpty || (kolektor.noHp ?? '').isEmpty) {
+    // Sesuai desain: tabel HANYA terisi kalau kolektor sudah dipilih.
+    // Belum pilih kolektor -> kosongkan tabel, tidak usah hit API.
+    if (_selectedKolektor == null) {
       _list = [];
       _buildTableRows();
       isLoading = false;
@@ -103,35 +102,37 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await TransaksiRepository.inquiryTransaksiTodayCollme(
-        userid: kolektor.userId!,
-        nohp: kolektor.noHp!,
+      final statusValue = _selectedStatus == 'SEMUA' ? null : _getStatusValue(_selectedStatus);
+      // Satu tanggal saja: kalau dipilih, tglFrom = tglTo = tanggal itu
+      // (cuma tanggal itu yang tampil). Kalau tidak dipilih, tidak dibatasi
+      // sama sekali (transaksi kapan pun tampil).
+      final tanggalStr = _tanggal != null ? DateFormat('yyyy-MM-dd').format(_tanggal!) : null;
+
+      final result = await TransaksiRepository.inquiryTransaksi(
+        bprId: _sessionUser!.bprId,
+        userLogin: _sessionUser!.usersId,
+        noHp: _selectedKolektor?.noHp,
+        tglFrom: tanggalStr,
+        tglTo: tanggalStr,
+        status: statusValue,
+        page: 1,
+        size: 500,
       );
 
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
-        var list = data.map((item) => TransaksiModel.fromJson(item)).toList();
-
-        // Status difilter di client — endpoint /api/transaksi/today tidak
-        // menerima parameter status, jadi semua transaksi hari ini datang
-        // sekaligus lalu disaring di sini.
-        if (_selectedStatus != 'SEMUA') {
-          final statusValue = _getStatusValue(_selectedStatus);
-          list = list.where((t) => (t.status ?? '').toLowerCase() == statusValue).toList();
-        }
-
-        list.sort((a, b) {
+        _list = data.map((item) => TransaksiModel.fromJson(item)).toList();
+        _list.sort((a, b) {
           final dateA = _parseDate(a.tglTrans);
           final dateB = _parseDate(b.tglTrans);
           return dateB.compareTo(dateA);
         });
-        _list = list;
       } else {
         _list = [];
-        if (kDebugMode) print('Error load transaksi today: ${result['message']}');
+        if (kDebugMode) print('Error load histori transaksi: ${result['message']}');
       }
     } catch (e) {
-      if (kDebugMode) print('ERROR LAPORAN TRANSAKSI KOLEKTOR: $e');
+      if (kDebugMode) print('ERROR HISTORI TRANSAKSI KOLEKTOR: $e');
       _list = [];
     }
 
@@ -143,10 +144,10 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
   DateTime _parseDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return DateTime(2000, 1, 1);
     try {
-      return DateFormat('yyyy-MM-dd HH:mm:ss').parse(dateStr);
+      return DateFormat('yyyy-MM-dd').parse(dateStr);
     } catch (_) {
       try {
-        return DateFormat('yyyy-MM-dd').parse(dateStr);
+        return DateFormat('dd/MM/yyyy').parse(dateStr);
       } catch (_) {
         return DateTime(2000, 1, 1);
       }
@@ -165,19 +166,13 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
       final index = entry.key;
       final item = entry.value;
 
-      // Kolom "Transaksi": pakai keterangan kalau ada, kalau kosong
-      // (seperti di response contoh) fallback ke trx_code.
-      final transaksiLabel = (item.keterangan != null && item.keterangan!.isNotEmpty)
-          ? item.keterangan!
-          : (item.trxCode != null && item.trxCode!.isNotEmpty)
-              ? item.trxCode!
-              : '-';
-
       return {
         'no': (index + 1).toString(),
-        'keterangan': transaksiLabel,
+        'keterangan': item.keterangan ?? '-',
         'status': getNamaStatus(item.status),
         'tgl_trans': item.tglTrans ?? '-',
+        // Nama pemilik rekening (nasabah) lawan transaksi kolektor —
+        // langsung dari API, bukan hasil lookup no_hp kolektor.
         'nama': (item.namaNasabah != null && item.namaNasabah!.isNotEmpty) ? item.namaNasabah! : '-',
         'no_rek': item.norekening ?? '-',
         'jumlah': _formatRupiah(item.jumlah),
@@ -201,7 +196,13 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
   void clearKolektor() {
     _selectedKolektor = null;
     kolektorSearchCtrl.clear();
+    // Kolektor dikosongkan -> tabel ikut dikosongkan (lihat loadData()).
     notifyListeners();
+    loadData();
+  }
+
+  void onTanggalChanged(DateTime? date) {
+    _tanggal = date;
     loadData();
   }
 
@@ -213,14 +214,14 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
 }
 
 // ==================== PAGE ====================
-class LaporanTransaksiPetugasPage extends StatelessWidget {
-  const LaporanTransaksiPetugasPage({super.key});
+class HistoriTransaksiKolektorPage extends StatelessWidget {
+  const HistoriTransaksiKolektorPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => LaporanTransaksiKolektorNotifier(context: context),
-      child: Consumer<LaporanTransaksiKolektorNotifier>(
+      create: (_) => HistoriTransaksiKolektorNotifier(context: context),
+      child: Consumer<HistoriTransaksiKolektorNotifier>(
         builder: (context, notifier, _) => Scaffold(
           backgroundColor: const Color(0xffF3F5F4),
           body: Column(
@@ -231,7 +232,7 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
                     ? const Center(child: CircularProgressIndicator())
                     : RefreshIndicator(
                         onRefresh: notifier.loadData,
-                        child: _buildContent(notifier),
+                        child: _buildContent(context, notifier),
                       ),
               ),
             ],
@@ -247,19 +248,19 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
       color: colorPrimary,
       child: const Text(
-        'Laporan Transaksi Kolektor',
+        'Histori Transaksi Kolektor',
         style: TextStyle(color: colortextwhite, fontSize: 24, fontWeight: FontWeight.w700),
       ),
     );
   }
 
-  Widget _buildContent(LaporanTransaksiKolektorNotifier notifier) {
+  Widget _buildContent(BuildContext context, HistoriTransaksiKolektorNotifier notifier) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildFilterSection(notifier),
+          _buildFilterSection(context, notifier),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -280,30 +281,6 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyKolektorHint() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search, size: 40, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              'Pilih kolektor terlebih dahulu untuk melihat transaksinya hari ini',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   List<AppGridColumn> _buildColumns() => [
         const AppGridColumn('keterangan', 'Transaksi', width: 200, align: Alignment.centerLeft),
         const AppGridColumn('status', 'Status', width: 140, align: Alignment.centerLeft),
@@ -313,7 +290,7 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
         AppGridColumn('jumlah', 'Nilai', width: 160, align: Alignment.centerRight, headerAlign: Alignment.centerLeft),
       ];
 
-  Widget _buildFilterSection(LaporanTransaksiKolektorNotifier notifier) {
+  Widget _buildFilterSection(BuildContext context, HistoriTransaksiKolektorNotifier notifier) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -324,7 +301,7 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Kolektor (wajib dipilih) ──
+          // ── Kolektor ──
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,12 +345,98 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 16),
+          // ── Tanggal — opsional (kosong = semua tanggal) ──
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Tanggal', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 4),
+                _datePickerField(
+                  context: context,
+                  value: notifier.tanggal,
+                  onChanged: notifier.onTanggalChanged,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBadges(LaporanTransaksiKolektorNotifier notifier) {
+  Widget _datePickerField({
+    required BuildContext context,
+    required DateTime? value,
+    required ValueChanged<DateTime?> onChanged,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          firstDate: DateTime(2020, 1, 1),
+          lastDate: DateTime.now(),
+          initialDate: value ?? DateTime.now(),
+        );
+        if (picked != null) onChanged(picked);
+      },
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, size: 16, color: colorPrimary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                value == null ? 'Tidak ditentukan' : DateFormat('dd/MM/yyyy').format(value),
+                style: TextStyle(
+                  color: value == null ? Colors.grey.shade600 : Colors.black87,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            if (value != null)
+              GestureDetector(
+                onTap: () => onChanged(null),
+                child: const Icon(Icons.close, size: 14, color: Colors.grey),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyKolektorHint() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search, size: 40, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'Pilih kolektor terlebih dahulu untuk melihat histori transaksinya',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadges(HistoriTransaksiKolektorNotifier notifier) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,

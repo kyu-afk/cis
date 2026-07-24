@@ -5,8 +5,6 @@ import '../../repository/users_access_repository.dart';
 import '../../network/network.dart';
 import '../../pref/pref.dart';
 import '../../utils/user_level.dart';
-import '../data_teller/data_teller_notifier.dart';
-import '../data_teller/data_teller_stsrec.dart';
 import '../../utils/colors.dart';
 
 class KantorDummyTeller {
@@ -93,29 +91,44 @@ class BukaTutupTellerNotifier extends ChangeNotifier {
       
       await _loadKantorList();
       
-      final result = await TellerRepository.inquiryTeller(bprId: _bprId);
-      
+      // PATCH: pakai inquiry dari DB LOKAL (inquiryTellerDb), bukan
+      // inquiryTeller() biasa — supaya status buka/tutup yang ditampilkan
+      // akurat (kolom stsaktif disinkron langsung oleh tombol buka/tutup),
+      // bukan field 'transaksi_teller' dari middleware lama yang sudah
+      // tidak dipakai untuk fitur ini.
+      final result = await TellerRepository.inquiryTellerDb(bprId: _bprId, limit: 500);
+
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
         final allTeller = data
-            .map((e) => DataTellerModel.fromJson(e as Map<String, dynamic>))
-            .where((t) => DataTellerStsrec.isAktif(t))
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((t) {
+              final stsAktif = (t['stsaktif'] ?? '').toString().toUpperCase();
+              // 'A' (terbuka) dan 'C' (tertutup) sama-sama masih aktif sebagai
+              // teller — bedanya cuma buka/tutup transaksi. 'B' (diblokir
+              // admin) tidak ditampilkan di sini.
+              return stsAktif != 'B';
+            })
             .toList();
 
         // Filter per kode kantor untuk user biasa (lvl1)
         final tellerAktif = UserLevelHelper.applyKantorFilter(
           list: allTeller,
           users: _sessionUser,
-          getKdKantor: (t) => t.kdKantor,
+          getKdKantor: (t) => (t['kd_kantor'] ?? '').toString(),
         );
 
-        _listTeller = tellerAktif.map((t) => BukaTutupTellerModel(
-          id: t.id ?? '',
-          nama: t.namaTeller ?? '-',
-          userId: t.userId ?? '',
-          namaKantor: _getNamaKantor(t.kdKantor),
-          transaksiDibuka: t.isTransaksiDibuka ?? true,
-        )).toList();
+        _listTeller = tellerAktif.map((t) {
+          final stsAktif = (t['stsaktif'] ?? '').toString().toUpperCase();
+          return BukaTutupTellerModel(
+            id: (t['id'] ?? '').toString(),
+            nama: (t['nama'] ?? '-').toString(),
+            userId: (t['userid'] ?? '').toString(),
+            namaKantor: _getNamaKantor((t['kd_kantor'] ?? '').toString()),
+            // 'A' = terbuka, selain itu (mis. 'C') = tertutup.
+            transaksiDibuka: stsAktif == 'A',
+          );
+        }).toList();
 
         for (final t in _listTeller) {
           _originalStatus[t.id] = t.transaksiDibuka;

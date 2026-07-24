@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import 'package:intl/intl.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class CollectorRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -185,6 +186,70 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
   }
 
   // ==================== INQUIRY COLLECTOR ====================
+  // ==================== INQUIRY DARI DB LOKAL ====================
+  // Dipakai KHUSUS untuk menu Buka/Tutup Transaksi Kolektor.
+  // Endpoint ini baca langsung dari database lokal (kolom stsaktif), yang
+  // disinkron langsung oleh bukaTransaksiCollector/tutupTransaksiCollector —
+  // jadi status di sini SELALU akurat, tidak seperti field 'transaksi_kolektor'
+  // dari inquiryCollector() biasa (yang datanya dari middleware/webservice lama).
+  //
+  // Status yang dikembalikan tiap item: 'stsaktif' = 'A' (terbuka) atau 'C' (tertutup).
+  static Future<Map<String, dynamic>> inquiryCollectorDb({
+    String? filterNama,
+    String? filterKdKantor,
+    String? bprId,
+    int page = 1,
+    int limit = 500,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {
+        "nama": filterNama ?? "",
+        "bpr_id": bprId ?? session.bprId,
+        "kd_kantor": filterKdKantor ?? "",
+        "page": page,
+        "size": limit,
+        "sort": "nama",
+        "order": "asc",
+      };
+      if (kDebugMode) {
+        print("INQUIRY COLLECTOR-DB URL: ${NetworkURL.inquiryCollectorDb()}");
+        print("INQUIRY COLLECTOR-DB BODY: ${jsonEncode(body)}");
+      }
+      final response = await dio.post(NetworkURL.inquiryCollectorDb(), data: body);
+      final decoded = _safeDecode(response.data);
+      if (kDebugMode) print("INQUIRY COLLECTOR-DB RESPONSE: $decoded");
+
+      final rawData = decoded['data'];
+      List<dynamic> dataList = [];
+      int total = 0;
+      if (rawData is Map) {
+        dataList = (rawData['list'] as List?) ?? [];
+        total = rawData['total'] ?? dataList.length;
+      }
+
+      // Defense in depth — walau sudah difilter bpr_id di backend.
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+        sentKodeKantor: (filterKdKantor ?? '').isNotEmpty,
+      );
+
+      return {
+        "value": _mapCode(decoded),
+        "message": _mapMessage(decoded),
+        "data": dataList,
+        "total": total,
+      };
+    } catch (e) {
+      if (kDebugMode) print("ERROR INQUIRY COLLECTOR-DB: $e");
+      return {"value": 0, "message": _dioErrorMessage(e), "data": []};
+    }
+  }
+
   static Future<Map<String, dynamic>> inquiryCollector({
     String? filterNama,
     String? filterKodePetugas,
@@ -244,7 +309,15 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         print("PARSED DATA LIST LENGTH: ${dataList.length}");
         print("PARSED TOTAL: $total");
       }
-      
+
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+        sentKodeKantor: true,
+      );
+
       return {
         "value": _mapCode(decoded),
         "message": _mapMessage(decoded),

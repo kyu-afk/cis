@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class SetupLimitRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -73,6 +74,15 @@ class SetupLimitRepository {
           dataList = [rawData];
         }
       }
+
+      final sentKodeKantor = body.containsKey('kd_kantor') || body.containsKey('kode_kantor');
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+        sentKodeKantor: sentKodeKantor,
+      );
 
       return {
         'value': _mapCode(decoded),

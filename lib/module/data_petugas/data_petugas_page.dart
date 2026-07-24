@@ -86,6 +86,10 @@ class DataPetugasPage extends StatelessWidget {
                 ],
               ),
               const Spacer(),
+              if (notifier.showSortOptions) ...[
+                _buildSortDropdown(notifier),
+                const SizedBox(width: 10),
+              ],
               SizedBox(
                 width: 250,
                 child: TextField(
@@ -112,6 +116,48 @@ class DataPetugasPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSortDropdown(DataPetugasNotifier notifier) {
+    final current = notifier.sortField == null
+        ? null
+        : '${notifier.sortField}:${notifier.sortAscending ? 'asc' : 'desc'}';
+
+    const options = [
+      {'value': 'nama:asc', 'label': 'Nama ↑'},
+      {'value': 'nama:desc', 'label': 'Nama ↓'},
+      {'value': 'kantor:asc', 'label': 'Kantor ↑'},
+      {'value': 'kantor:desc', 'label': 'Kantor ↓'},
+    ];
+
+    return SizedBox(
+      width: 150,
+      child: DropdownButtonFormField<String>(
+        value: current,
+        isExpanded: true,
+        icon: const Icon(Icons.sort, size: 18),
+        hint: const Text('Urutkan', style: TextStyle(fontSize: 12)),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        items: options
+            .map((o) => DropdownMenuItem(
+                  value: o['value'],
+                  child: Text(o['label']!, style: const TextStyle(fontSize: 12)),
+                ))
+            .toList(),
+        onChanged: (v) {
+          if (v == null) {
+            notifier.clearSort();
+            return;
+          }
+          final parts = v.split(':');
+          notifier.setSort(parts[0], parts[1] == 'asc');
+        },
+      ),
     );
   }
 
@@ -374,19 +420,20 @@ class DataPetugasPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Nama - READONLY saat EDIT, bisa diisi dari HRIS saat TAMBAH
+                // Nama - READONLY (tambah maupun edit), hanya bisa terisi
+                // lewat pencarian HRIS di atas, tidak boleh diketik manual.
                 _fieldLabel('Nama Kolektor *'),
                 TextFormField(
                   controller: notifier.namaCtrl,
-                  readOnly: isEdit || (isTambah && notifier.hrmEmployeeSelected),
+                  readOnly: true,
                   decoration: _inputDecoration(
-                    isEdit ? 'Nama tidak dapat diubah' : 'Nama Kolektor',
-                    fillColor: (isEdit || (isTambah && notifier.hrmEmployeeSelected)) ? Colors.grey.shade100 : Colors.white,
+                    isEdit
+                        ? 'Nama tidak dapat diubah'
+                        : 'Terisi otomatis setelah pilih karyawan HRIS di atas',
+                    fillColor: Colors.grey.shade100,
                   ).copyWith(
                     errorText: notifier.manualErrors['nama'],
-                    suffixIcon: isEdit || (isTambah && notifier.hrmEmployeeSelected)
-                        ? const Icon(Icons.lock, size: 16, color: Colors.grey)
-                        : null,
+                    suffixIcon: const Icon(Icons.lock, size: 16, color: Colors.grey),
                   ),
                   validator: null,
                 ),
@@ -465,31 +512,27 @@ class DataPetugasPage extends StatelessWidget {
                         ),
                       ),
                     ] else if (isTambah) ...[
-                      // TAMBAH: Dropdown Kantor (jika tidak dari HRIS)
-                      DropdownButtonFormField<KantorDummy>(
-                        value: notifier.selectedKantor,
-                        isExpanded: true,
-                        hint: const Text('Pilih Kantor', style: TextStyle(fontSize: 13)),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
+                      // TAMBAH: Kantor HANYA dari HRIS — sebelum karyawan
+                      // HRIS dipilih, tampilkan placeholder terkunci (tidak
+                      // ada lagi opsi pilih kantor manual).
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
                         ),
-                        items: notifier.listKantor.map((k) => DropdownMenuItem(
-                          value: k,
-                          child: Text('${k.kdKantor} — ${k.namaKantor}', style: const TextStyle(fontSize: 13)),
-                        )).toList(),
-                        onChanged: isReadOnly ? null : notifier.setSelectedKantor,
-                        validator: null,
+                        child: const Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Terisi otomatis setelah pilih karyawan HRIS di atas',
+                                style: TextStyle(fontSize: 13, color: Colors.grey),
+                              ),
+                            ),
+                            Icon(Icons.lock, size: 16, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     ],
                     if (notifier.manualErrors['kantor'] != null)
@@ -538,6 +581,38 @@ class DataPetugasPage extends StatelessWidget {
                   ),
                   _fieldNote('* Password minimal 6 karakter'),
                   const SizedBox(height: 16),
+                ],
+
+                // Password (edit mode: dengan checkbox)
+                if (isEdit) ...[
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: notifier.isChangePassword,
+                        onChanged: notifier.toggleChangePassword,
+                        activeColor: colorPrimary,
+                      ),
+                      const Text('Ganti Password', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (notifier.isChangePassword) ...[
+                    TextFormField(
+                      controller: notifier.passwordCtrl,
+                      obscureText: notifier.obscure,
+                      decoration: _inputDecoration(
+                        'Password baru (min. 6 karakter)',
+                        suffix: IconButton(
+                          onPressed: notifier.toggleObscure,
+                          icon: Icon(notifier.obscure ? Icons.visibility : Icons.visibility_off, size: 20),
+                        ),
+                      ).copyWith(
+                        errorText: notifier.manualErrors['password'],
+                      ),
+                      validator: null,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
 
                 // No HP (wajib untuk tambah dan edit)

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class SetupTransaksiRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -134,7 +135,17 @@ class SetupTransaksiRepository {
 
       if (kDebugMode) print('INQUIRY SETUP-TRANSAKSI RESP: $res');
 
-      return {'value': _mapCode(res), 'message': _mapMessage(res), 'data': res['data']};
+      final rawData = res['data'];
+      final filteredData = rawData is List
+          ? InquiryFilter.applyWithSession(
+              rawData,
+              sessionBprId: session.bprId,
+              sessionKodeKantor: session.kodeKantor,
+              sentBprId: true,
+            )
+          : rawData;
+
+      return {'value': _mapCode(res), 'message': _mapMessage(res), 'data': filteredData};
     } catch (e) {
       if (kDebugMode) print('INQUIRY SETUP-TRANSAKSI ERR: $e');
       return {'value': 0, 'message': _dioErrorMessage(e)};

@@ -28,6 +28,7 @@ class DataTellerModel {
   String? hrmEmployeeId;
   bool? isTransaksiDibuka;
   bool? transaksiTeller;
+  bool hakOtor;
 
   DataTellerModel({
     this.id,
@@ -44,6 +45,7 @@ class DataTellerModel {
     this.hrmEmployeeId,
     this.isTransaksiDibuka,
     this.transaksiTeller,
+    this.hakOtor = false,
   });
 
   factory DataTellerModel.fromJson(Map<String, dynamic> json) {
@@ -69,6 +71,7 @@ class DataTellerModel {
       hrmEmployeeId: json['hrm_employee_id']?.toString(),
       isTransaksiDibuka: json['transaksi_teller'] == true,
       transaksiTeller: json['transaksi_teller'] == true,
+      hakOtor: (json['hak_otor'] ?? 'N').toString().toUpperCase() == 'Y',
     );
   }
 }
@@ -340,6 +343,39 @@ class DataTellerNotifier extends ChangeNotifier {
 
   // Search
   final searchCtrl = TextEditingController();
+
+  // ==================== SORT (khusus kode kantor 000) ====================
+  String? _sortField; // 'nama' | 'kantor' | 'tglexp'
+  bool _sortAscending = true;
+
+  String? get sortField => _sortField;
+  bool get sortAscending => _sortAscending;
+
+  /// Hanya kode kantor 000 (kantor pusat) yang lihat data lintas-kantor,
+  /// jadi opsi sort ini cuma relevan/ditampilkan untuk mereka.
+  bool get showSortOptions => (_sessionUser?.kodeKantor ?? '') == '000';
+
+  void setSort(String field, bool ascending) {
+    _sortField = field;
+    _sortAscending = ascending;
+    _applyFilter();
+  }
+
+  void clearSort() {
+    _sortField = null;
+    _applyFilter();
+  }
+
+  DateTime? _parseTglExp(String? raw) {
+    final v = (raw ?? '').trim();
+    if (v.isEmpty) return null;
+    try {
+      final dateOnly = v.split(' ')[0].split('T')[0];
+      return DateTime.parse(dateOnly);
+    } catch (_) {
+      return null;
+    }
+  }
   String _searchKeyword = '';
   Timer? _debounceTimer;
 
@@ -354,6 +390,13 @@ class DataTellerNotifier extends ChangeNotifier {
   final namaSbbCtrl = TextEditingController();
   final tglCtrl = TextEditingController();
   final batchCtrl = TextEditingController();
+
+  // Hak Otorisasi (checkbox tambah/edit) — dikirim sebagai 'Y'/'N' ke backend.
+  bool hakOtor = false;
+  void setHakOtor(bool value) {
+    hakOtor = value;
+    notifyListeners();
+  }
 
   // Limit transaksi controllers (min & max per tcode)
   final limitMinSetorTunaiCtrl  = TextEditingController(); // tcode 1000 min
@@ -497,6 +540,14 @@ class DataTellerNotifier extends ChangeNotifier {
         allValid = false;
         if (firstErrorKey == null) firstErrorKey = 'userId';
       }
+    }
+
+    // Karyawan HRIS (wajib untuk tambah) — nama & kantor cuma boleh terisi
+    // lewat pencarian ini, jadi kalau belum pilih, tolak submit di sini.
+    if (isTambah && selectedHrmEmployee == null) {
+      errors['hrmEmployee'] = 'Wajib pilih karyawan dari HRIS terlebih dahulu';
+      allValid = false;
+      if (firstErrorKey == null) firstErrorKey = 'hrmEmployee';
     }
     
     // Nama Teller (tambah dan edit)
@@ -1039,6 +1090,38 @@ class DataTellerNotifier extends ChangeNotifier {
                (t.userId ?? '').toLowerCase().contains(kw);
       }).toList();
     }
+    if (_sortField != null) {
+      final field = _sortField!;
+      final asc = _sortAscending;
+      _filteredList.sort((a, b) {
+        int cmp;
+        switch (field) {
+          case 'kantor':
+            cmp = getNamaKantor(a.kdKantor).toLowerCase().compareTo(getNamaKantor(b.kdKantor).toLowerCase());
+            break;
+          case 'tglexp':
+            final da = _parseTglExp(a.tglKadaluarsa);
+            final db = _parseTglExp(b.tglKadaluarsa);
+            if (da == null && db == null) {
+              cmp = 0;
+            } else if (da == null) {
+              cmp = 1;
+            } else if (db == null) {
+              cmp = -1;
+            } else {
+              cmp = da.compareTo(db);
+            }
+            break;
+          case 'nama':
+          default:
+            cmp = (a.namaTeller ?? '').toLowerCase().compareTo((b.namaTeller ?? '').toLowerCase());
+        }
+        return asc ? cmp : -cmp;
+      });
+      notifyListeners();
+      return;
+    }
+
     const _statusOrder = {'aktif': 0, 'blokir': 1};
     _filteredList.sort((a, b) {
       final sa = _statusOrder[DataTellerStsrec.code(a)] ?? 9;
@@ -1098,6 +1181,7 @@ class DataTellerNotifier extends ChangeNotifier {
     
     isChangePassword = false;
     obscure = true;
+    hakOtor = false;
     
     notifyListeners();
   }
@@ -1112,6 +1196,7 @@ class DataTellerNotifier extends ChangeNotifier {
     noSbbCtrl.text = teller.noSbb ?? '';
     namaSbbCtrl.text = teller.namasbb ?? '';
     batchCtrl.text = teller.batch ?? '';
+    hakOtor = teller.hakOtor;
     passwordCtrl.clear();
     alasanCtrl.clear();
     isChangePassword = false;
@@ -1312,6 +1397,13 @@ class DataTellerNotifier extends ChangeNotifier {
       changes['Batch'] = {
         'old': old.batch ?? '-',
         'new': batchCtrl.text.trim().isEmpty ? '-' : batchCtrl.text.trim(),
+      };
+    }
+
+    if (old.hakOtor != hakOtor) {
+      changes['Hak Otorisasi'] = {
+        'old': old.hakOtor ? 'Ya' : 'Tidak',
+        'new': hakOtor ? 'Ya' : 'Tidak',
       };
     }
     
@@ -1725,6 +1817,8 @@ class DataTellerNotifier extends ChangeNotifier {
                           _konfirmasiRow('Kantor', selectedKantor?.namaKantor ?? '-'),
                           const SizedBox(height: 6),
                           _konfirmasiRow('Batch', batchCtrl.text.trim()),
+                          const SizedBox(height: 6),
+                          _konfirmasiRow('Hak Otorisasi', hakOtor ? 'Ya' : 'Tidak'),
                         ],
                       ),
                     ),
@@ -1867,6 +1961,7 @@ class DataTellerNotifier extends ChangeNotifier {
           batch: batchCtrl.text.trim(),
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id,
+          hakOtor: hakOtor,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();
@@ -1888,6 +1983,7 @@ class DataTellerNotifier extends ChangeNotifier {
           batch: batchCtrl.text.trim(),
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id ?? selectedTeller?.hrmEmployeeId,
+          hakOtor: hakOtor,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();

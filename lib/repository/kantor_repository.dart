@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../network/network.dart';
+import '../utils/inquiry_filter.dart';
 
 class KantorRepository {
   static Dio _dio() {
@@ -81,10 +82,15 @@ class KantorRepository {
       print("RESPONSE DATA KANTOR : $decoded");
     }
 
+    final filteredData = await InquiryFilter.apply(
+      _mapDataList(decoded),
+      sentBprId: true,
+    );
+
     return {
       "value": _mapValueFromGo(decoded),
       "message": _mapMessageFromGo(decoded),
-      "data": _mapDataList(decoded),
+      "data": filteredData,
       // tetap dikembalikan supaya notifier lama tidak error
       "sandi_bank": _buildDummySandiBank(bprId),
       // optional: simpan raw response untuk debug

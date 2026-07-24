@@ -6,6 +6,7 @@ import 'package:cis_menu/module/kelola_kartu/data_kartu_page.dart';
 import 'package:cis_menu/module/kelola_kartu/update_status_page.dart';
 import 'package:cis_menu/module/kelola_foto/kelola_foto_page.dart';
 import 'package:cis_menu/module/laporan/laporan_transaksi_petugas_page.dart'; // 🔥 TAMBAHKAN
+import 'package:cis_menu/module/laporan/laporan_histori_transaksi_kolektor_page.dart';
 import 'package:cis_menu/module/menu/menu_notifier.dart';
 import 'package:cis_menu/module/mpin/cetak_mpin_page.dart';
 import 'package:cis_menu/module/mpin/generate_mpin_page.dart';
@@ -51,6 +52,7 @@ class MenuPage extends StatelessWidget {
     62: LaporanDataTellerPage(),
     63: LaporanDataPetugasPage(),
     64: LaporanTransaksiPetugasPage(), // 🔥 TAMBAHKAN
+    65: HistoriTransaksiKolektorPage(),
     70: BukaTutupPetugasPage(),
     71: BukaTutupTellerPage(),
     80: KelolaFotoPage(),
@@ -107,6 +109,8 @@ class MenuPage extends StatelessWidget {
               menu: 'LAPORAN', submenu: 'DATA PETUGAS'),
           _MenuItem('Transaksi Kolektor', Icons.receipt_long, page: 64, // 🔥 TAMBAHKAN
               menu: 'LAPORAN', submenu: 'TRANSAKSI PETUGAS'),
+          _MenuItem('Histori Transaksi Kolektor', Icons.history_edu, page: 65,
+              menu: 'LAPORAN', submenu: 'HISTORI TRANSAKSI PETUGAS'),
         ]),
       ];
 

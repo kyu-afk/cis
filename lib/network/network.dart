@@ -8,6 +8,11 @@ const String apiKeymiddlewarecis =
 const url = "https://ibprservices.medtrans.id";
 const url2 = "https://infoservices.medtrans.id";
 const url_go = "https://api-dev-cms.medtrans.id";
+
+// API langsung ke Collme (bukan lewat web_service_CIS) — dipakai khusus
+// untuk Laporan Transaksi Kolektor (hari ini), sesuai endpoint asli:
+// GET https://api-collme.medtrans.id/api/transaksi/today
+const String url_collme = "https://api-collme.medtrans.id";
 const String _wsBaseUrlOverride =
     String.fromEnvironment('WS_BASE_URL', defaultValue: '');
 
@@ -74,6 +79,7 @@ class NetworkURL {
 
   // ---------- Teller ----------
   static String inquiryTeller()  => "$url_go3/cis/teller/inquiry";
+  static String inquiryTellerDb() => "$url_go3/cis/teller/inquiry-db";
   static String insertTeller()   => "$url_go3/cis/teller/insert";
   static String updateTeller()   => "$url_go3/cis/teller/update";
   static String deleteTeller()   => "$url_go3/cis/teller/delete";
@@ -110,6 +116,9 @@ class NetworkURL {
 
   // ---------- Transaksi Petugas  ----------
   static String inquiryTransaksi() => "$url_go3/cis/transaksi/inquiry";
+  // GET, query params: userid & nohp (wajib) — endpoint Collme langsung,
+  // BUKAN lewat web_service_CIS. Selalu mengembalikan transaksi HARI INI saja.
+  static String transaksiTodayCollme() => "$url_collme/api/transaksi/today";
 
   // ---------- SBB Perantara ----------
   static String inquirySbbPerantara() => "$url_go3/cis/sbb-perantara/inquiry";

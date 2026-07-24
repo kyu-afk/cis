@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class TransaksiRepository {
   static Future<Map<String, dynamic>> inquiryTransaksi({
@@ -63,8 +64,15 @@ class TransaksiRepository {
         if (jsonData['code'] == '000' || jsonData['status'] == 'success') {
           // response membungkus list di dalam data.items
           final Map<String, dynamic> dataObj = jsonData['data'] ?? {};
-          final List<dynamic> items = dataObj['items'] ?? [];
+          final List<dynamic> rawItems = dataObj['items'] ?? [];
           final Map<String, dynamic> pagination = dataObj['pagination'] ?? {};
+          final session = await Pref().getUsers();
+          final items = InquiryFilter.applyWithSession(
+            rawItems,
+            sessionBprId: session.bprId,
+            sessionKodeKantor: session.kodeKantor,
+            sentBprId: true,
+          );
           return {
             'value': 1,
             'message': jsonData['message'] ?? 'Berhasil',
@@ -89,6 +97,83 @@ class TransaksiRepository {
       if (kDebugMode) {
         print("❌ ERROR INQUIRY TRANSAKSI: $e");
       }
+      return {
+        'value': 0,
+        'message': 'Error: $e',
+        'data': [],
+      };
+    }
+  }
+
+  // ==================== TRANSAKSI HARI INI (Collme langsung) ====================
+  // GET https://api-collme.medtrans.id/api/transaksi/today?userid=...&nohp=...
+  // Endpoint ini BUKAN lewat web_service_CIS — langsung ke servis Collme,
+  // dan WAJIB kirim userid & nohp milik kolektor yang dipilih. Selalu
+  // mengembalikan transaksi hari ini saja (tidak ada filter tanggal).
+  //
+  // CATATAN: skema auth endpoint ini awalnya dikira tidak perlu header
+  // tambahan, tapi ternyata backend membalas 401 "Token tidak ditemukan"
+  // tanpa Authorization header. Sekarang dikirim pakai token sesi CIS yang
+  // sama (Pref().getToken()) sebagai percobaan pertama — kalau ternyata
+  // Collme butuh token yang beda (bukan token CIS), kasih tahu supaya
+  // disesuaikan.
+  static Future<Map<String, dynamic>> inquiryTransaksiTodayCollme({
+    required String userid,
+    required String nohp,
+  }) async {
+    try {
+      final token = await Pref().getToken();
+      final uri = Uri.parse(NetworkURL.transaksiTodayCollme()).replace(
+        queryParameters: {
+          'userid': userid,
+          'nohp': nohp,
+        },
+      );
+
+      if (kDebugMode) {
+        print("📤 TRANSAKSI TODAY (Collme) URL: $uri");
+      }
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (kDebugMode) {
+        print("📥 TRANSAKSI TODAY STATUS: ${response.statusCode}");
+        print("📥 TRANSAKSI TODAY RESPONSE: ${response.body}");
+      }
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+
+        if (jsonData['code'] == '000') {
+          final List<dynamic> items = jsonData['data'] ?? [];
+          return {
+            'value': 1,
+            'message': jsonData['message'] ?? 'OK',
+            'data': items,
+            'total': items.length,
+          };
+        } else {
+          return {
+            'value': 0,
+            'message': jsonData['message'] ?? 'Gagal memuat data transaksi',
+            'data': [],
+          };
+        }
+      } else {
+        return {
+          'value': 0,
+          'message': 'HTTP ${response.statusCode}',
+          'data': [],
+        };
+      }
+    } catch (e) {
+      if (kDebugMode) print("❌ ERROR TRANSAKSI TODAY (Collme): $e");
       return {
         'value': 0,
         'message': 'Error: $e',

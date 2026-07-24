@@ -35,18 +35,24 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
   final TextEditingController _internalController = TextEditingController();
   Timer? _debounceTimer;
 
+  // Field ini dipakai supaya daftar saran tampil MENGAMBANG (overlay) di atas
+  // konten lain, bukan render inline yang mendorong layout ke bawah.
+  final LayerLink _layerLink = LayerLink();
+  final GlobalKey _fieldKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+
   @override
   void initState() {
     super.initState();
     _internalController.text = widget.controller.text;
     _loadAllPetugas();
-    
+
     _focusNode.addListener(() {
       if (_focusNode.hasFocus && _internalController.text.trim().isNotEmpty && _filteredList.isNotEmpty) {
-        setState(() => _showDropdown = true);
+        _setShowDropdown(true);
       } else if (!_focusNode.hasFocus) {
         Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted) setState(() => _showDropdown = false);
+          if (mounted) _setShowDropdown(false);
         });
       }
     });
@@ -81,21 +87,19 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
 
   void _filterPetugas(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    
+
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      setState(() {
-        if (query.isEmpty) {
-          _filteredList = [];
-          _showDropdown = false;
-        } else {
-          _filteredList = _allPetugas.where((p) {
-            final nama = p.nama?.toLowerCase() ?? '';
-            final search = query.toLowerCase();
-            return nama.contains(search);
-          }).toList();
-          _showDropdown = _filteredList.isNotEmpty;
-        }
-      });
+      if (query.isEmpty) {
+        _filteredList = [];
+        _setShowDropdown(false);
+      } else {
+        _filteredList = _allPetugas.where((p) {
+          final nama = p.nama?.toLowerCase() ?? '';
+          final search = query.toLowerCase();
+          return nama.contains(search);
+        }).toList();
+        _setShowDropdown(_filteredList.isNotEmpty);
+      }
     });
   }
 
@@ -103,13 +107,95 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
     _internalController.text = petugas.nama ?? '';
     widget.controller.text = petugas.nama ?? '';
     widget.onPetugasSelected(petugas);
-    setState(() => _showDropdown = false);
+    _setShowDropdown(false);
     _focusNode.unfocus();
+  }
+
+  // ==================== OVERLAY (dropdown mengambang) ====================
+  void _setShowDropdown(bool value) {
+    setState(() => _showDropdown = value);
+    _syncOverlay();
+  }
+
+  void _syncOverlay() {
+    final shouldShow = _showDropdown && _filteredList.isNotEmpty;
+    if (shouldShow) {
+      if (_overlayEntry == null) {
+        _insertOverlay();
+      } else {
+        _overlayEntry!.markNeedsBuild();
+      }
+    } else {
+      _removeOverlay();
+    }
+  }
+
+  void _insertOverlay() {
+    final renderBox = _fieldKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        width: size.width,
+        child: CompositedTransformFollower(
+          link: _layerLink,
+          showWhenUnlinked: false,
+          offset: Offset(0, size.height + 4),
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: _filteredList.length,
+                itemBuilder: (context, index) {
+                  final petugas = _filteredList[index];
+                  return InkWell(
+                    onTap: () => _selectPetugas(petugas),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Text(
+                        petugas.nama ?? '-',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _removeOverlay();
     _focusNode.dispose();
     _internalController.dispose();
     super.dispose();
@@ -117,10 +203,11 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextFormField(
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: Container(
+        key: _fieldKey,
+        child: TextFormField(
           controller: _internalController,
           focusNode: _focusNode,
           readOnly: widget.isReadOnly,
@@ -159,41 +246,7 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
             return null;
           },
         ),
-        if (_showDropdown && _filteredList.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            constraints: const BoxConstraints(maxHeight: 200),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _filteredList.length,
-              itemBuilder: (context, index) {
-                final petugas = _filteredList[index];
-                return InkWell(
-                  onTap: () => _selectPetugas(petugas),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: Text(
-                      petugas.nama ?? '-',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
+      ),
     );
   }
 }

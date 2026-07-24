@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class KelolaFotoRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -69,7 +70,12 @@ class KelolaFotoRepository {
 
       final code = (decoded['code'] ?? '').toString();
       final rawData = decoded['data'];
-      final dataList = rawData is List ? rawData : <dynamic>[];
+      final dataList = InquiryFilter.applyWithSession(
+        rawData is List ? rawData : <dynamic>[],
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      );
 
       return {
         'value': code == '000' ? 1 : 0,

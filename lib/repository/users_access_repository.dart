@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import '../models/index.dart';
 import '../pref/pref.dart';
+import '../utils/inquiry_filter.dart';
 
 class UsersAccessRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -170,6 +171,7 @@ class UsersAccessRepository {
 
       final body = {
         "filter": {
+          "bpr_id":   bprId,
           "userid":   normalizedFilterUserid,
           "namauser": filterNamauser ?? "",
           "stsaktif": filterStsaktif ?? "",
@@ -191,12 +193,23 @@ class UsersAccessRepository {
       if (kDebugMode) print("RESPONSE DATA INQUIRY USERS : $decoded");
 
       final rawData = decoded['data'];
-      final List<dynamic> dataList;
+      List<dynamic> dataList;
       if (rawData is Map && rawData['data'] is List) {
         dataList = rawData['data'] as List;
       } else {
         dataList = _asList(rawData);
       }
+
+      // Defense in depth: backend sekarang sudah filter bpr_id di query,
+      // tapi tetap difilter juga di client kalau-kalau ada jalur lain
+      // (mis. cache, response lama) yang belum ter-scope dengan benar.
+      final session = await Pref().getUsers();
+      dataList = InquiryFilter.applyWithSession(
+        dataList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      );
 
       return {
         "value": _mapValueFromGo(decoded),
@@ -603,7 +616,14 @@ class UsersAccessRepository {
           "branch_type": m['branch_type']?.toString(),
         };
       }).toList();
-      return {"value": 1, "message": "", "kantor": kantorList};
+      final session = await Pref().getUsers();
+      final filteredKantorList = InquiryFilter.applyWithSession(
+        kantorList,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      );
+      return {"value": 1, "message": "", "kantor": filteredKantorList};
     } catch (e) {
       if (kDebugMode) print('ERROR getListKantor (HRM): $e');
       return {"value": 0, "message": e.toString(), "kantor": []};
@@ -629,7 +649,14 @@ class UsersAccessRepository {
       } else if (decoded?['data'] is List) {
         employees = decoded!['data'] as List<dynamic>;
       }
-      return employees.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final mapped = employees.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final session = await Pref().getUsers();
+      return InquiryFilter.applyWithSession(
+        mapped,
+        sessionBprId: session.bprId,
+        sessionKodeKantor: session.kodeKantor,
+        sentBprId: true,
+      ).cast<Map<String, dynamic>>();
     } catch (e) {
       if (kDebugMode) print('ERROR searchHrmEmployee: $e');
       return [];

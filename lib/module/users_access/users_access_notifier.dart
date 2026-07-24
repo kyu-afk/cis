@@ -250,6 +250,41 @@ class UsersAccessNotifier extends ChangeNotifier {
   String _searchKeyword = '';
   Timer? _debounceTimer;
 
+  // ==================== SORT (khusus kode kantor 000) ====================
+  // Kantor pusat (kode_kantor 000) lihat data campur dari banyak kantor,
+  // jadi dikasih opsi urut manual: nama, kantor, atau tgl kadaluarsa.
+  String? _sortField; // 'nama' | 'kantor' | 'tglexp'
+  bool _sortAscending = true;
+
+  String? get sortField => _sortField;
+  bool get sortAscending => _sortAscending;
+
+  /// Hanya kode kantor 000 (kantor pusat) yang lihat data lintas-kantor,
+  /// jadi opsi sort ini cuma relevan/ditampilkan untuk mereka.
+  bool get showSortOptions => (_sessionUser?.kodeKantor ?? '') == '000';
+
+  void setSort(String field, bool ascending) {
+    _sortField = field;
+    _sortAscending = ascending;
+    _applyFilter();
+  }
+
+  void clearSort() {
+    _sortField = null;
+    _applyFilter();
+  }
+
+  DateTime? _parseTglExp(String? raw) {
+    final v = (raw ?? '').trim();
+    if (v.isEmpty) return null;
+    try {
+      final dateOnly = v.split(' ')[0].split('T')[0];
+      return DateTime.parse(dateOnly);
+    } catch (_) {
+      return null;
+    }
+  }
+
   final ctrlUserId = TextEditingController();
   final ctrlNama = TextEditingController();
   final ctrlPass = TextEditingController();
@@ -341,8 +376,12 @@ class UsersAccessNotifier extends ChangeNotifier {
             .where((u) => UsersAccessStsrec.code(u) != 'C')
             .toList();
 
+        // Backend (endpoint inquiry) sekarang sudah filter lvluser=1 di query-nya,
+        // tapi tetap difilter juga di sini (defense in depth) — user access
+        // hanya untuk user normal (lvluser 1), admin (2) & system (3) dibuat
+        // lewat jalur lain dan tidak boleh muncul di menu ini.
         final visibleUsers = activeUsers
-            .where((u) => !((u.kdkantor ?? '') == '000' && (u.lvluser ?? 1) != 1))
+            .where((u) => (u.lvluser ?? 1) == 1)
             .toList();
 
         _list = _canSeeAllKantor
@@ -370,6 +409,38 @@ class UsersAccessNotifier extends ChangeNotifier {
         return (u.userid ?? '').toLowerCase().contains(kw) || (u.namauser ?? '').toLowerCase().contains(kw);
       }).toList();
     }
+    if (_sortField != null) {
+      final field = _sortField!;
+      final asc = _sortAscending;
+      _filteredList.sort((a, b) {
+        int cmp;
+        switch (field) {
+          case 'kantor':
+            cmp = getNamaKantor(a.kdkantor).toLowerCase().compareTo(getNamaKantor(b.kdkantor).toLowerCase());
+            break;
+          case 'tglexp':
+            final da = _parseTglExp(a.tglexp);
+            final db = _parseTglExp(b.tglexp);
+            if (da == null && db == null) {
+              cmp = 0;
+            } else if (da == null) {
+              cmp = 1;
+            } else if (db == null) {
+              cmp = -1;
+            } else {
+              cmp = da.compareTo(db);
+            }
+            break;
+          case 'nama':
+          default:
+            cmp = (a.namauser ?? '').toLowerCase().compareTo((b.namauser ?? '').toLowerCase());
+        }
+        return asc ? cmp : -cmp;
+      });
+      notifyListeners();
+      return;
+    }
+
     const _statusOrder = {'A': 0, 'B': 1, 'C': 2};
     _filteredList.sort((a, b) {
       final sa = _statusOrder[UsersAccessStsrec.code(a)] ?? 9;
@@ -721,6 +792,13 @@ class UsersAccessNotifier extends ChangeNotifier {
         errors['userid'] = userIdError;
         allValid = false;
       }
+    }
+
+    // Karyawan HRIS (wajib untuk tambah) — nama & kantor cuma boleh terisi
+    // lewat pencarian ini, jadi kalau belum pilih, tolak submit di sini.
+    if (drawerMode == 'tambah' && selectedHrmEmployee == null) {
+      errors['hrmEmployee'] = 'Wajib pilih karyawan dari HRIS terlebih dahulu';
+      allValid = false;
     }
     
     if (drawerMode == 'tambah' || drawerMode == 'edit') {
