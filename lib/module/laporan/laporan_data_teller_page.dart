@@ -12,7 +12,6 @@ import '../../utils/colors.dart';
 import '../../utils/user_level.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../data_teller/data_teller_notifier.dart';
-import '../data_teller/data_teller_stsrec.dart';
 
 // ==================== NOTIFIER ====================
 class _LaporanDataTellerNotifier extends ChangeNotifier {
@@ -38,8 +37,9 @@ class _LaporanDataTellerNotifier extends ChangeNotifier {
 
   final searchCtrl = TextEditingController();
 
-  int get jumlahAktif => _list.where((t) => DataTellerStsrec.isAktif(t)).length;
-  int get jumlahTidakAktif => _list.length - jumlahAktif;
+  int get jumlahDibuka => _list.where((t) => t.stsBukaTutup == 'A').length;
+  int get jumlahDitutup => _list.where((t) => t.stsBukaTutup == 'C').length;
+  int get jumlahDiblokir => _list.where((t) => t.stsBukaTutup == 'B').length;
 
   String getNamaKantor(String? kdKantor) {
     if (kdKantor == null || kdKantor.isEmpty) return '-';
@@ -74,6 +74,13 @@ class _LaporanDataTellerNotifier extends ChangeNotifier {
             .map((e) => DataTellerModel.fromJson(Map<String, dynamic>.from(e)))
             .where((t) => t.status?.toLowerCase() != 'hapus')
             .toList();
+
+        // PATCH: status buka/tutup diambil dari database lokal (sama persis
+        // sumber yang dipakai menu Buka/Tutup Transaksi, sudah terbukti
+        // akurat) — bukan dari field 'transaksi_teller' hasil middleware
+        // yang kadang gak sinkron sama tombol buka/tutup yang sebenarnya.
+        await _overrideBukaTutupFromLocalDb(allList);
+
         _list = UserLevelHelper.applyKantorFilter(
           list: allList,
           users: _sessionUser,
@@ -88,6 +95,34 @@ class _LaporanDataTellerNotifier extends ChangeNotifier {
     }
     _applyFilter();
     notifyListeners();
+  }
+
+  Future<void> _overrideBukaTutupFromLocalDb(List<DataTellerModel> list) async {
+    try {
+      final dbResult = await TellerRepository.inquiryTellerDb(bprId: _bprId, limit: 1000);
+      if (dbResult['value'] != 1) {
+        if (kDebugMode) print('BUKA_TUTUP: gagal ambil inquiry-db: ${dbResult['message']}');
+        return;
+      }
+      final List<dynamic> dbRows = dbResult['data'] ?? [];
+      final Map<String, String> stsByUserId = {
+        for (final row in dbRows)
+          if ((row['userid'] ?? '').toString().trim().isNotEmpty)
+            row['userid'].toString().trim().toUpperCase():
+                (row['stsaktif'] ?? 'C').toString().toUpperCase(),
+      };
+      for (final teller in list) {
+        final key = (teller.userId ?? '').trim().toUpperCase();
+        if (key.isEmpty) continue;
+        if (stsByUserId.containsKey(key)) {
+          final sts = stsByUserId[key]!;
+          teller.stsBukaTutup = sts;
+          teller.isTransaksiDibuka = sts == 'A';
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('BUKA_TUTUP: error override dari DB lokal: $e');
+    }
   }
 
   Future<void> _loadKantor() async {
@@ -124,10 +159,10 @@ class _LaporanDataTellerNotifier extends ChangeNotifier {
             (t.noSbb ?? '').toLowerCase().contains(kw);
       }).toList();
     }
-    const order = {'aktif': 0, 'blokir': 1};
+    const order = {'A': 0, 'C': 1, 'B': 2};
     _filteredList.sort((a, b) {
-      final sa = order[DataTellerStsrec.code(a)] ?? 9;
-      final sb = order[DataTellerStsrec.code(b)] ?? 9;
+      final sa = order[a.stsBukaTutup] ?? 9;
+      final sb = order[b.stsBukaTutup] ?? 9;
       if (sa != sb) return sa.compareTo(sb);
       return (a.namaTeller ?? '').toLowerCase().compareTo((b.namaTeller ?? '').toLowerCase());
     });
@@ -204,8 +239,9 @@ class LaporanDataTellerPage extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _badge('Total: ${notifier.list.length}', Colors.black),
-                  _badge('Aktif: ${notifier.jumlahAktif}', Colors.green),
-                  _badge('Tidak Aktif: ${notifier.jumlahTidakAktif}', Colors.red),
+                  _badge('Dibuka: ${notifier.jumlahDibuka}', Colors.green),
+                  _badge('Ditutup: ${notifier.jumlahDitutup}', Colors.red),
+                  _badge('Diblokir: ${notifier.jumlahDiblokir}', Colors.orange),
                 ],
               ),
               const Spacer(),
@@ -254,15 +290,11 @@ class LaporanDataTellerPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns(_LaporanDataTellerNotifier notifier) => [
         const AppGridColumn('no', 'No', width: 60, align: Alignment.center),
-        const AppGridColumn('namaTeller', 'Nama Teller', width: 250),
-        const AppGridColumn('userId', 'User ID', width: 200),
-        const AppGridColumn('noSbb', 'No SBB', width: 200),
+        const AppGridColumn('namaTeller', 'Nama Teller', width: 320),
+        const AppGridColumn('userId', 'User ID', width: 240),
+        const AppGridColumn('noSbb', 'No SBB', width: 240),
         const AppGridColumn('kantor', 'Kantor', width: 200),
-        AppGridColumn('statusAkun', 'Status Akun',
-            width: 150,
-            align: Alignment.center,
-            cellBuilder: (value) => _statusBadge(value, _statusAkunColor(value.toString()))),
-        AppGridColumn('statusBukaTutup', 'Status Buka/Tutup',
+        AppGridColumn('statusBukaTutup', 'Status',
             width: 180,
             align: Alignment.center,
             cellBuilder: (value) => _statusBadge(value, _statusBukaTutupColor(value.toString()))),
@@ -271,35 +303,39 @@ class LaporanDataTellerPage extends StatelessWidget {
   List<Map<String, dynamic>> _buildRows(_LaporanDataTellerNotifier notifier) {
     int no = 0;
     return notifier.filteredList.map((t) {
-      final statusAkun = DataTellerStsrec.statusFor(t);
-      final isDibuka = t.isTransaksiDibuka == true;
       return {
         'no': ++no,
         'namaTeller': t.namaTeller ?? '-',
         'userId': t.userId ?? '-',
         'noSbb': t.noSbb ?? '-',
         'kantor': notifier.getNamaKantor(t.kdKantor),
-        'statusAkun': statusAkun,
-        'statusBukaTutup': isDibuka ? 'Dibuka' : 'Ditutup',
+        'statusBukaTutup': _labelBukaTutup(t.stsBukaTutup),
       };
     }).toList();
   }
 
-  Color _statusAkunColor(String label) {
-    switch (label.toUpperCase()) {
-      case 'AKTIF':
-        return Colors.green;
-      case 'BLOKIR':
-        return Colors.orange;
-      case 'HAPUS':
-        return Colors.red;
+  String _labelBukaTutup(String? sts) {
+    switch (sts) {
+      case 'A':
+        return 'Dibuka';
+      case 'B':
+        return 'Diblokir';
+      case 'C':
       default:
-        return Colors.grey;
+        return 'Ditutup';
     }
   }
 
   Color _statusBukaTutupColor(String label) {
-    return label == 'Dibuka' ? Colors.blue : Colors.blueGrey;
+    switch (label) {
+      case 'Dibuka':
+        return Colors.green;
+      case 'Diblokir':
+        return Colors.orange;
+      case 'Ditutup':
+      default:
+        return Colors.red;
+    }
   }
 
   Widget _statusBadge(dynamic value, Color color) {

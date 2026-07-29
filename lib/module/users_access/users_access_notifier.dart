@@ -179,6 +179,7 @@ class UsersAccessNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: _sessionUser!.bprId,
         search: name,
+        applyKantorFilter: false,
       );
       HrmEmployeeModel? emp;
       for (final raw in results) {
@@ -217,6 +218,7 @@ class UsersAccessNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: _sessionUser!.bprId,
         search: name,
+        applyKantorFilter: false,
       );
       for (final raw in results) {
         final emp = HrmEmployeeModel.fromJson(raw);

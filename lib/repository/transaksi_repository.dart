@@ -181,4 +181,85 @@ class TransaksiRepository {
       };
     }
   }
+
+  // ==================== TRANSAKSI KOLEKTOR (Settlement DB Lokal) ====================
+  // POST /cis/transaksi/settlement-inquiry-db
+  // Baca LANGSUNG dari database lokal kita (cis_settlement JOIN
+  // cis_settlement_items) — gantiin API Collme yang sempat 401.
+  // Kolektor (userid ATAU nohp) WAJIB dikirim. Tanggal opsional: kosong =
+  // semua tanggal, isi tglFrom/tglTo = dibatasi rentang itu (bisa sama
+  // untuk cuma 1 tanggal spesifik / hari ini saja).
+  static Future<Map<String, dynamic>> inquirySettlementItemsDb({
+    String? userid,
+    String? nohp,
+    String? tglFrom,
+    String? tglTo,
+    String? status,
+    String? bprId,
+    int page = 1,
+    int size = 500,
+  }) async {
+    try {
+      final token = await Pref().getToken();
+      final session = await Pref().getUsers();
+
+      final requestBody = {
+        'bpr_id':   bprId ?? session.bprId,
+        'userid':   userid ?? '',
+        'nohp':     nohp ?? '',
+        'tgl_from': tglFrom ?? '',
+        'tgl_to':   tglTo ?? '',
+        'status':   status ?? '',
+        'page':     page,
+        'size':     size,
+      };
+
+      if (kDebugMode) {
+        print('📤 SETTLEMENT INQUIRY-DB URL: ${NetworkURL.settlementInquiryDb()}');
+        print('📤 SETTLEMENT INQUIRY-DB BODY: ${jsonEncode(requestBody)}');
+      }
+
+      final response = await http.post(
+        Uri.parse(NetworkURL.settlementInquiryDb()),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKeymiddlewarecis,
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      if (kDebugMode) {
+        print('📥 SETTLEMENT INQUIRY-DB STATUS: ${response.statusCode}');
+        print('📥 SETTLEMENT INQUIRY-DB RESPONSE: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        if (jsonData['code'] == '000') {
+          final Map<String, dynamic> dataObj = jsonData['data'] ?? {};
+          final List<dynamic> items = dataObj['list'] ?? [];
+          return {
+            'value':   1,
+            'message': jsonData['message'] ?? 'OK',
+            'data':    items,
+            'total':   dataObj['total'] ?? items.length,
+          };
+        }
+        return {
+          'value':   0,
+          'message': jsonData['message'] ?? 'Gagal memuat data transaksi',
+          'data':    [],
+        };
+      }
+      return {
+        'value':   0,
+        'message': 'HTTP ${response.statusCode}',
+        'data':    [],
+      };
+    } catch (e) {
+      if (kDebugMode) print('❌ ERROR SETTLEMENT INQUIRY-DB: $e');
+      return {'value': 0, 'message': 'Error: $e', 'data': []};
+    }
+  }
 }

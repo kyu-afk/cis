@@ -39,6 +39,9 @@ class DataPetugasModel {
   bool aksesPpob = false;
   bool aksesKredit = false;
   bool? transaksiKolektor;
+  // Status mentah buka/tutup: 'A' (dibuka), 'C' (ditutup), 'B' (diblokir admin).
+  // Diisi belakangan dari inquiry-db lokal (lihat laporan_data_petugas_page.dart).
+  String? stsBukaTutup;
   String? mpin;
   String? mpinLock;
   String? mpinCetak;
@@ -227,6 +230,24 @@ class DataPetugasNotifier extends ChangeNotifier {
   }
 
   void selectHrmEmployee(HrmEmployeeModel emp) {
+    // PATCH: satu karyawan HRIS (hrm_employee_id) cuma boleh punya SATU akun
+    // kolektor aktif. Nama sengaja TIDAK dipakai buat cek ini — dua orang
+    // beda bisa aja namanya sama persis, tapi hrm_employee_id pasti beda.
+    final existing = _list.where((p) =>
+        (p.status?.toLowerCase() ?? '') != 'hapus' &&
+        p.hrmEmployeeId != null &&
+        p.hrmEmployeeId!.isNotEmpty &&
+        p.hrmEmployeeId == emp.id).toList();
+    if (existing.isNotEmpty) {
+      _manualErrors['hrmEmployee'] =
+          'Karyawan ini sudah terdaftar sebagai kolektor dengan User ID "${existing.first.userId}". Satu karyawan HRIS hanya boleh punya satu akun kolektor.';
+      selectedHrmEmployee = null;
+      hrmSearchController.clear();
+      namaCtrl.clear();
+      notifyListeners();
+      return;
+    }
+    _manualErrors.remove('hrmEmployee');
     selectedHrmEmployee = emp;
     hrmSearchController.text = emp.name;
     namaCtrl.text = emp.name;
@@ -258,7 +279,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     if (empId == null || empId.isEmpty || name.isEmpty || _sessionUser == null) return;
 
     try {
-      final results = await UsersAccessRepository.searchHrmEmployee(bprId: _sessionUser!.bprId, search: name);
+      final results = await UsersAccessRepository.searchHrmEmployee(bprId: _sessionUser!.bprId, search: name, applyKantorFilter: false);
       for (final raw in results) {
         final emp = HrmEmployeeModel.fromJson(raw);
         if (emp.id == empId) {
@@ -292,6 +313,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: _sessionUser!.bprId,
         search: name,
+        applyKantorFilter: false,
       );
       HrmEmployeeModel? emp;
       for (final raw in results) {
@@ -330,6 +352,7 @@ class DataPetugasNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: _sessionUser!.bprId,
         search: (p.nama ?? '').trim(),
+        applyKantorFilter: false,
       );
       HrmEmployeeModel? emp;
       for (final raw in results) {
@@ -638,7 +661,12 @@ class DataPetugasNotifier extends ChangeNotifier {
           final isAktif = saved['is_aktif'] == true;
           final min = isAktif ? ((saved['min_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
           final max = isAktif ? ((saved['limit_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
-          final pending = isAktif ? ((saved['pending_nominal'] as num?)?.toDouble() ?? 0.0) : 0.0;
+          // Pending cuma boleh keisi manual untuk Setor Tunai (4600) — tcode
+          // lain dikunci di UI, jadi paksa 0 di sini juga (biar konsisten
+          // sama tampilan, dan gak nyimpen sisa nilai lama yang gak relevan).
+          final pending = (isAktif && tcode == '4600')
+              ? ((saved['pending_nominal'] as num?)?.toDouble() ?? 0.0)
+              : 0.0;
           tcodeAksesList[idx]['checked'] = isAktif;
           (tcodeAksesList[idx]['minCtrl'] as TextEditingController).text =
               min == 0 ? '0' : rupiahFmt.format(min.toInt());
@@ -2116,6 +2144,7 @@ class DataPetugasNotifier extends ChangeNotifier {
           noHp: noHpCtrl.text.trim(),
           nip: nipCtrl.text.trim(),
           kdKantor: selectedKantor?.kdKantor ?? '',
+          namaKantor: selectedKantor?.namaKantor,
           kodePetugas: kodePetugasCtrl.text.trim(),
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
@@ -2136,6 +2165,7 @@ class DataPetugasNotifier extends ChangeNotifier {
           noHp: noHpCtrl.text.trim(),
           nip: nipCtrl.text.trim(),
           kdKantor: selectedKantor?.kdKantor ?? selectedPetugas?.kdKantor ?? '',
+          namaKantor: selectedKantor?.namaKantor,
           kodePetugas: kodePetugasCtrl.text.trim(),
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),

@@ -5,6 +5,7 @@ import 'package:cis_menu/pref/pref.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cis_menu/utils/inquiry_filter.dart';
+import 'package:cis_menu/repository/collector_repository.dart';
 
 class ModalKolektorRepository {
   static Future<Dio> _dio() => ApiClient.buildProtected();
@@ -46,8 +47,38 @@ class ModalKolektorRepository {
       final d = _decode(res.data);
       final raw = d['data'];
       final List rawItems = raw is Map ? (raw['items'] ?? raw['data'] ?? []) : (raw is List ? raw : []);
+
+      // PATCH: data modal kolektor sendiri gak bawa field kd_kantor, jadi
+      // buat filter per-kantor kita cross-check ke inquiry kolektor (yang
+      // punya kd_kantor per nohp), lalu tempel ke tiap item di sini.
+      List filteredItems = rawItems;
+      if ((session.kodeKantor).isNotEmpty && session.kodeKantor != '000') {
+        try {
+          final kolektorResult = await CollectorRepository.inquiryCollectorDb(limit: 1000);
+          if (kolektorResult['value'] == 1) {
+            final List<dynamic> kolektorList = kolektorResult['data'] ?? [];
+            final Map<String, String> kdKantorByNoHp = {
+              for (final k in kolektorList)
+                if ((k['nohp'] ?? '').toString().trim().isNotEmpty)
+                  k['nohp'].toString().trim(): (k['kd_kantor'] ?? '').toString(),
+            };
+            filteredItems = rawItems.where((item) {
+              final nohp = (item['petugas_hp'] ?? '').toString().trim();
+              final kdKantor = kdKantorByNoHp[nohp];
+              // Kalau gak ketemu cross-reference-nya, biarkan lolos (jangan
+              // sampai data hilang gara-gara gagal cocokin, bukan gara-gara
+              // memang beda kantor).
+              if (kdKantor == null) return true;
+              return kdKantor == session.kodeKantor;
+            }).toList();
+          }
+        } catch (e) {
+          if (kDebugMode) print('MODAL KOLEKTOR: gagal cross-check kd_kantor: $e');
+        }
+      }
+
       final items = InquiryFilter.applyWithSession(
-        rawItems,
+        filteredItems,
         sessionBprId: session.bprId,
         sessionKodeKantor: session.kodeKantor,
         sentBprId: true,

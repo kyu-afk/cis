@@ -189,7 +189,19 @@ class DataTellerPage extends StatelessWidget {
       isAction: true,
       cellBuilder: (_) => const Icon(Icons.edit_note, size: 30, color: Colors.grey),
       onActionTap: (rowData) {
-        final teller = DataTellerModel(
+        // PATCH: sebelumnya di sini bikin DataTellerModel baru secara manual
+        // dari rowData, tapi field baru (mis. hakOtor) suka kelupaan
+        // ditambahkan di sini — akibatnya field itu selalu balik ke default
+        // walau datanya sebenarnya sudah benar di list. Sekarang langsung
+        // ambil objek ASLI dari filteredList (semua field ikut lengkap),
+        // dicocokkan pakai id, dengan fallback ke rekonstruksi manual kalau
+        // entah kenapa gak ketemu.
+        final rowId = rowData['id']?.toString();
+        DataTellerModel? teller = notifier.filteredList
+            .cast<DataTellerModel?>()
+            .firstWhere((t) => t?.id == rowId, orElse: () => null);
+
+        teller ??= DataTellerModel(
           id: rowData['id']?.toString(),
           userId: rowData['userId']?.toString(),
           namaTeller: rowData['namaTeller']?.toString(),
@@ -591,14 +603,15 @@ class DataTellerPage extends StatelessWidget {
                 // HAK OTORISASI (untuk tambah dan edit) — diletakkan di atas,
                 // tepat di bawah User ID, supaya gak kelewat pas isi form.
                 if (isFormMode) ...[
-                  CheckboxListTile(
-                    value: notifier.hakOtor,
-                    onChanged: isReadOnly ? null : (v) => notifier.setHakOtor(v ?? false),
-                    title: const Text('Hak Otorisasi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    activeColor: colorPrimary,
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: notifier.hakOtor,
+                        onChanged: isReadOnly ? null : (v) => notifier.setHakOtor(v ?? false),
+                        activeColor: colorPrimary,
+                      ),
+                      const Text('Hak Otorisasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -747,35 +760,112 @@ class DataTellerPage extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Limit Transaksi (hanya form mode)
+                // Limit Transaksi (hanya form mode) — collapsible
                 if (isFormMode) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 10),
-                    child: Row(children: [
-                      Icon(Icons.account_balance_wallet_outlined, size: 16, color: colorPrimary),
-                      SizedBox(width: 6),
-                      Text('Limit Transaksi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorPrimary)),
-                    ]),
-                  ),
-                  _limitTcodeRow(
-                    label: 'Setor Tunai (1000)',
-                    minCtrl: notifier.limitMinSetorTunaiCtrl,
-                    maxCtrl: notifier.limitSetorTunaiCtrl,
-                    errorText: notifier.manualErrors['limitSetor'],
+                  _collapsibleSection(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'Limit Transaksi',
+                    initiallyExpanded: false,
+                    children: [
+                      _limitTcodeRow(
+                        label: 'Setor Tunai (1000)',
+                        minCtrl: notifier.limitMinSetorTunaiCtrl,
+                        maxCtrl: notifier.limitSetorTunaiCtrl,
+                        errorText: notifier.manualErrors['limitSetor'],
+                      ),
+                      const SizedBox(height: 12),
+                      _limitTcodeRow(
+                        label: 'Tarik Tunai (1100)',
+                        minCtrl: notifier.limitMinTarikTunaiCtrl,
+                        maxCtrl: notifier.limitTarikTunaiCtrl,
+                        errorText: notifier.manualErrors['limitTarik'],
+                      ),
+                      const SizedBox(height: 12),
+                      _limitTcodeRow(
+                        label: 'Pindah Buku (2300)',
+                        minCtrl: notifier.limitMinPindahBukuCtrl,
+                        maxCtrl: notifier.limitPindahBukuCtrl,
+                        errorText: notifier.manualErrors['limitPindah'],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  _limitTcodeRow(
-                    label: 'Tarik Tunai (1100)',
-                    minCtrl: notifier.limitMinTarikTunaiCtrl,
-                    maxCtrl: notifier.limitTarikTunaiCtrl,
-                    errorText: notifier.manualErrors['limitTarik'],
-                  ),
-                  const SizedBox(height: 12),
-                  _limitTcodeRow(
-                    label: 'Pindah Buku (2300)',
-                    minCtrl: notifier.limitMinPindahBukuCtrl,
-                    maxCtrl: notifier.limitPindahBukuCtrl,
-                    errorText: notifier.manualErrors['limitPindah'],
+
+                  // Fasilitas (hanya form mode) — collapsible, wajib minimal 1
+                  _collapsibleSection(
+                    icon: Icons.checklist_outlined,
+                    title: 'Fasilitas',
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorPrimary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('${notifier.selectedFasilitas.length} dipilih',
+                          style: const TextStyle(fontSize: 11, color: colorPrimary, fontWeight: FontWeight.w600)),
+                    ),
+                    initiallyExpanded: notifier.manualErrors['fasilitas'] != null,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: notifier.manualErrors['fasilitas'] != null ? Colors.red : Colors.grey.shade300,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: notifier.listFasilitas.isEmpty
+                            ? const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text('Tidak ada fasilitas tersedia', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              )
+                            : ListView.builder(
+                                itemCount: notifier.listFasilitas.length,
+                                shrinkWrap: true,
+                                physics: const ClampingScrollPhysics(),
+                                itemBuilder: (_, i) {
+                                  final f = notifier.listFasilitas[i];
+                                  final selected = notifier.selectedFasilitas.contains(f);
+                                  return InkWell(
+                                    onTap: isReadOnly ? null : () => notifier.toggleFasilitas(f),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: selected ? colorPrimary.withOpacity(0.05) : null,
+                                        border: i > 0 ? const Border(top: BorderSide(color: Color(0xffEEEEEE))) : null,
+                                      ),
+                                      child: Row(children: [
+                                        Checkbox(
+                                          activeColor: colorPrimary,
+                                          value: selected,
+                                          onChanged: isReadOnly ? null : (_) => notifier.toggleFasilitas(f),
+                                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(f.menu, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                              if (f.submenu.isNotEmpty)
+                                                Text(f.submenu, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                                            ],
+                                          ),
+                                        ),
+                                      ]),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (notifier.manualErrors['fasilitas'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 4),
+                          child: Text(
+                            notifier.manualErrors['fasilitas']!,
+                            style: const TextStyle(fontSize: 12, color: Colors.red),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -1114,6 +1204,39 @@ class DataTellerPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.black87)),
+    );
+  }
+
+  Widget _collapsibleSection({
+    required IconData icon,
+    required String title,
+    required List<Widget> children,
+    Widget? trailing,
+    bool initiallyExpanded = false,
+  }) {
+    return Theme(
+      // Hilangkan garis divider bawaan ExpansionTile biar nyatu sama style form.
+      data: ThemeData(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          iconColor: colorPrimary,
+          collapsedIconColor: colorPrimary,
+          leading: Icon(icon, size: 16, color: colorPrimary),
+          title: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorPrimary)),
+          trailing: trailing != null
+              ? Row(mainAxisSize: MainAxisSize.min, children: [trailing, const SizedBox(width: 4), const Icon(Icons.expand_more, size: 20)])
+              : null,
+          children: children,
+        ),
+      ),
     );
   }
 

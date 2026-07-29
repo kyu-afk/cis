@@ -59,6 +59,7 @@ class NetworkURL {
   // ---------- Collector (Petugas) ----------
   static String inquiryCollector() => "$url_go3/cis/collector/inquiry";
   static String inquiryCollectorDb() => "$url_go3/cis/collector/inquiry-db";
+  static String resetDeviceCollector() => "$url_go3/cis/collector/reset-device";
   static String resolveUserIdCollector() => "$url_go3/cis/collector/resolve-userid";
   static String syncRepairCollector()   => "$url_go3/cis/collector/sync-repair";
   static String syncBackfillCollector() => "$url_go3/cis/collector/sync-backfill";
@@ -80,6 +81,7 @@ class NetworkURL {
   // ---------- Teller ----------
   static String inquiryTeller()  => "$url_go3/cis/teller/inquiry";
   static String inquiryTellerDb() => "$url_go3/cis/teller/inquiry-db";
+  static String resetDeviceTeller() => "$url_go3/cis/teller/reset-device";
   static String insertTeller()   => "$url_go3/cis/teller/insert";
   static String updateTeller()   => "$url_go3/cis/teller/update";
   static String deleteTeller()   => "$url_go3/cis/teller/delete";
@@ -116,6 +118,9 @@ class NetworkURL {
 
   // ---------- Transaksi Petugas  ----------
   static String inquiryTransaksi() => "$url_go3/cis/transaksi/inquiry";
+  // Transaksi kolektor LANGSUNG dari database lokal (cis_settlement +
+  // cis_settlement_items) — pengganti API Collme yang sempat bermasalah 401.
+  static String settlementInquiryDb() => "$url_go3/cis/transaksi/settlement-inquiry-db";
   // GET, query params: userid & nohp (wajib) — endpoint Collme langsung,
   // BUKAN lewat web_service_CIS. Selalu mengembalikan transaksi HARI INI saja.
   static String transaksiTodayCollme() => "$url_collme/api/transaksi/today";

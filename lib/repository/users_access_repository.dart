@@ -551,13 +551,14 @@ class UsersAccessRepository {
     required String url,
     required String userId,
     required String bprId,
+    String type = "CIS",
   }) async {
     try {
       final dio = _dioLegacy();
       final normalizedUserId = _normalizeUserId(userId);
       final body = {
         "action": "list",
-        "type": "CIS",
+        "type": type,
       };
       if (kDebugMode) {
         print("ENDPOINT URL GET LIST FASILITAS : $url");
@@ -634,6 +635,12 @@ class UsersAccessRepository {
   static Future<List<Map<String, dynamic>>> searchHrmEmployee({
     required String bprId,
     required String search,
+    // PATCH: default true (dipakai form "Tambah" — cari karyawan sesuai
+    // kantor sendiri). Untuk "Update Kantor dari HRIS" HARUS false, karena
+    // fitur itu justru dipakai ketika kantor karyawan di HRIS sudah beda
+    // dari yang tercatat — kalau difilter kantor, karyawannya malah gak
+    // ketemu sama sekali.
+    bool applyKantorFilter = true,
   }) async {
     try {
       final dio = _dioLegacy();
@@ -651,11 +658,27 @@ class UsersAccessRepository {
       }
       final mapped = employees.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       final session = await Pref().getUsers();
+
+      if (!applyKantorFilter) {
+        return mapped;
+      }
+
+      // PATCH: kode kantor dari HRIS itu nested (office.branch_code), bukan
+      // field flat — flatten dulu ke 'kode_kantor' supaya InquiryFilter bisa
+      // baca & filter berdasarkan kantor session (kecuali session "000").
+      for (final emp in mapped) {
+        final office = emp['office'];
+        if (office is Map) {
+          emp['kode_kantor'] = (office['branch_code'] ?? office['kd_kantor'] ?? '').toString();
+        }
+      }
+
       return InquiryFilter.applyWithSession(
         mapped,
         sessionBprId: session.bprId,
         sessionKodeKantor: session.kodeKantor,
         sentBprId: true,
+        sentKodeKantor: true,
       ).cast<Map<String, dynamic>>();
     } catch (e) {
       if (kDebugMode) print('ERROR searchHrmEmployee: $e');

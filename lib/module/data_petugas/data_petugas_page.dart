@@ -768,6 +768,7 @@ class DataPetugasPage extends StatelessWidget {
                           onAksesChanged: (v) => notifier.toggleTcodeAkses(idx, v),
                           manualErrors: notifier.manualErrors,
                           errorPrefix: 'tcode_$tcode',
+                          lockPending: tcode != '4600',
                         ),
                       );
                     }),
@@ -1251,6 +1252,7 @@ class _LimitSection extends StatelessWidget {
     required this.onAksesChanged,
     required this.manualErrors,
     required this.errorPrefix,
+    this.lockPending = false,
   });
 
   final String label;
@@ -1261,6 +1263,9 @@ class _LimitSection extends StatelessWidget {
   final ValueChanged<bool?> onAksesChanged;
   final Map<String, String> manualErrors;
   final String errorPrefix;
+  // Field "Pending" cuma boleh diisi manual untuk Setor Tunai (4600) — tcode
+  // lain dikunci (readonly), gak bisa diubah dari sini.
+  final bool lockPending;
 
   @override
   Widget build(BuildContext context) {
@@ -1288,7 +1293,7 @@ class _LimitSection extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(child: _limitField('Max', maxCtrl, readOnly || !enabled, fieldType: 'max', minCtrl: minCtrl, errorKey: '${errorPrefix}_max')),
             const SizedBox(width: 8),
-            Expanded(child: _limitField('Pending', pendingCtrl, readOnly || !enabled, fieldType: 'pending', errorKey: '${errorPrefix}_pending')),
+            Expanded(child: _limitField('Pending', pendingCtrl, readOnly || !enabled || lockPending, fieldType: 'pending', errorKey: '${errorPrefix}_pending')),
           ]),
         ],
       ),

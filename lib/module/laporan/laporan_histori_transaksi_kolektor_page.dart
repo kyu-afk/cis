@@ -13,6 +13,7 @@ import '../../models/index.dart';
 import '../../models/transaksi_model.dart';
 import '../../pref/pref.dart';
 import '../../repository/transaksi_repository.dart';
+import '../../repository/setup_transaksi_repository.dart';
 import '../../utils/colors.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../../utils/widgets/searchable_dropdown_petugas.dart';
@@ -32,20 +33,24 @@ class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
   UsersModel? _sessionUser;
 
   // ── Filter: Status ──
+  // Sesuai nilai ASLI di kolom cis_settlement_items.status
+  // (ditemukan dari data: ada, posted, failed, hapus, pending_otor).
   String _selectedStatus = 'SEMUA';
   String get selectedStatus => _selectedStatus;
-  final List<String> statusOptions = const ['SEMUA', 'PENDING', 'POSTING', 'SETELMEN', 'TIMEOUT'];
+  final List<String> statusOptions = const ['SEMUA', 'ADA', 'POSTED', 'PENDING OTOR', 'FAILED', 'HAPUS'];
 
   String _getStatusValue(String selectedStatus) {
     switch (selectedStatus) {
-      case 'TIMEOUT':
-        return 'timeout';
-      case 'PENDING':
-        return 'pending';
-      case 'POSTING':
-        return 'posting';
-      case 'SETELMEN':
-        return 'setelmen';
+      case 'ADA':
+        return 'ada';
+      case 'POSTED':
+        return 'posted';
+      case 'PENDING OTOR':
+        return 'pending_otor';
+      case 'FAILED':
+        return 'failed';
+      case 'HAPUS':
+        return 'hapus';
       default:
         return '';
     }
@@ -62,27 +67,49 @@ class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
 
   int get totalData => _tableRows.length;
 
+  // Terjemahan trx_code -> keterangan, sumbernya sama persis dengan
+  // "Setup Transaksi Collector" (SetupTransaksiRepository.listTcode()).
+  Map<String, String> _tcodeKeterangan = {};
+
   List<Map<String, dynamic>> _tableRows = [];
   List<Map<String, dynamic>> get tableRows => _tableRows;
 
   String getNamaStatus(String? status) {
-    switch (status?.toUpperCase()) {
-      case 'PENDING':
-        return 'PENDING';
-      case 'POSTING':
-        return 'POSTING';
-      case 'SETELMEN':
-        return 'SETELMEN';
-      case 'TIMEOUT':
-        return 'TIMEOUT';
+    switch (status?.toLowerCase()) {
+      case 'ada':
+        return 'ADA';
+      case 'posted':
+        return 'POSTED';
+      case 'pending_otor':
+        return 'PENDING OTOR';
+      case 'failed':
+        return 'GAGAL';
+      case 'hapus':
+        return 'DIHAPUS';
       default:
-        return status ?? '-';
+        return (status ?? '-').toUpperCase();
     }
   }
 
   Future<void> _init() async {
     _sessionUser = await Pref().getUsers();
+    await _loadTcodeKeterangan();
     await loadData();
+  }
+
+  Future<void> _loadTcodeKeterangan() async {
+    try {
+      final result = await SetupTransaksiRepository.listTcode();
+      if (result['value'] == 1) {
+        final List<dynamic> data = result['data'] ?? [];
+        _tcodeKeterangan = {
+          for (final e in data)
+            (e['tcode'] ?? '').toString(): (e['keterangan'] ?? '').toString(),
+        };
+      }
+    } catch (e) {
+      if (kDebugMode) print('ERROR LOAD TCODE: $e');
+    }
   }
 
   Future<void> loadData() async {
@@ -108,15 +135,13 @@ class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
       // sama sekali (transaksi kapan pun tampil).
       final tanggalStr = _tanggal != null ? DateFormat('yyyy-MM-dd').format(_tanggal!) : null;
 
-      final result = await TransaksiRepository.inquiryTransaksi(
+      final result = await TransaksiRepository.inquirySettlementItemsDb(
         bprId: _sessionUser!.bprId,
-        userLogin: _sessionUser!.usersId,
-        noHp: _selectedKolektor?.noHp,
+        userid: _selectedKolektor!.userId,
+        nohp: _selectedKolektor!.noHp,
         tglFrom: tanggalStr,
         tglTo: tanggalStr,
         status: statusValue,
-        page: 1,
-        size: 500,
       );
 
       if (result['value'] == 1) {
@@ -166,9 +191,19 @@ class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
       final index = entry.key;
       final item = entry.value;
 
+      // Kolom "Transaksi": prioritas ambil dari daftar Setup Transaksi
+      // Collector (trx_code -> keterangan), fallback ke keterangan bawaan
+      // transaksi itu sendiri kalau tcode-nya gak ketemu di daftar.
+      final transaksiLabel = _tcodeKeterangan[item.trxCode] ??
+          ((item.keterangan != null && item.keterangan!.isNotEmpty)
+              ? item.keterangan!
+              : (item.trxCode != null && item.trxCode!.isNotEmpty)
+                  ? item.trxCode!
+                  : '-');
+
       return {
         'no': (index + 1).toString(),
-        'keterangan': item.keterangan ?? '-',
+        'keterangan': transaksiLabel,
         'status': getNamaStatus(item.status),
         'tgl_trans': item.tglTrans ?? '-',
         // Nama pemilik rekening (nasabah) lawan transaksi kolektor —
@@ -283,10 +318,10 @@ class HistoriTransaksiKolektorPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns() => [
         const AppGridColumn('keterangan', 'Transaksi', width: 200, align: Alignment.centerLeft),
-        const AppGridColumn('status', 'Status', width: 140, align: Alignment.centerLeft),
-        const AppGridColumn('tgl_trans', 'Tanggal', width: 150, align: Alignment.centerLeft),
-        const AppGridColumn('nama', 'Nama', width: 220, align: Alignment.centerLeft),
-        const AppGridColumn('no_rek', 'No Rek', width: 190, align: Alignment.centerLeft),
+        const AppGridColumn('status', 'Status', width: 160, align: Alignment.centerLeft),
+        const AppGridColumn('tgl_trans', 'Tanggal', width: 220, align: Alignment.centerLeft),
+        const AppGridColumn('nama', 'Nama', width: 240, align: Alignment.centerLeft),
+        const AppGridColumn('no_rek', 'No Rek', width: 220, align: Alignment.centerLeft),
         AppGridColumn('jumlah', 'Nilai', width: 160, align: Alignment.centerRight, headerAlign: Alignment.centerLeft),
       ];
 

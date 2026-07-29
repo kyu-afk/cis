@@ -6,6 +6,7 @@ import '../network/network.dart';
 import 'package:intl/intl.dart';
 import '../pref/pref.dart';
 import '../utils/inquiry_filter.dart';
+import '../models/fasilitas_model.dart';
 
 class TellerRepository {
   static Future<Dio> _dioWithToken() => ApiClient.buildProtected();
@@ -174,9 +175,37 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
   // inquiryTeller() biasa (yang datanya dari middleware/webservice lama).
   //
   // Status yang dikembalikan tiap item: 'stsaktif' = 'A' (terbuka) atau 'C' (tertutup).
+  // ==================== RESET DEVICE ====================
+  // Kosongkan login_device_id, login_device_name, & fcm_token milik teller,
+  // supaya dia bisa login dari device lain.
+  static Future<Map<String, dynamic>> resetDevice({required String userid}) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {
+        'bpr_id': session.bprId,
+        'userid': userid,
+        'userlogin': session.usersId,
+        'term': 'WEB',
+      };
+      if (kDebugMode) print('📤 RESET DEVICE TELLER BODY: ${jsonEncode(body)}');
+      final response = await dio.post(NetworkURL.resetDeviceTeller(), data: body);
+      final decoded = _safeDecode(response.data);
+      if (kDebugMode) print('📥 RESET DEVICE TELLER RESPONSE: $decoded');
+      return {
+        'value':   _mapCode(decoded),
+        'message': _mapMessage(decoded),
+      };
+    } catch (e) {
+      if (kDebugMode) print('❌ ERROR RESET DEVICE TELLER: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e)};
+    }
+  }
+
   static Future<Map<String, dynamic>> inquiryTellerDb({
     String? filterNama,
     String? filterKdKantor,
+    String? search,
     String? bprId,
     int page = 1,
     int limit = 500,
@@ -186,6 +215,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
       final session = await Pref().getUsers();
       final body = {
         "nama": filterNama ?? "",
+        "search": search ?? "",
         "bpr_id": bprId ?? session.bprId,
         "kd_kantor": filterKdKantor ?? "",
         "page": page,
@@ -315,8 +345,10 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String tanggalExpired,
     required String batch, 
     String? bprId,
+    String? namaKantor,
     String? hrmEmployeeId,
     bool hakOtor = false,
+    List<FasilitasModel>? akses,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -329,6 +361,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nohp':             noHp,
         'nip':              nip,
         'kd_kantor':        kdKantor,
+        'nama_kantor':      namaKantor ?? '',
         'hrm_employee_id':  hrmEmployeeId ?? '',
         'sbb_teller':       sbbTeller,
         'nama_sbb':         namaSbb,
@@ -338,6 +371,16 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'bpr_id':           bprId ?? session.bprId,
         'userlogin':        session.usersId,
         'term':             'WEB',
+        // Fasilitas/menu akses khusus teller (type "TELLER" di master
+        // fasilitas), sama pola dengan akses di User Access.
+        'akses': (akses ?? []).map((f) => {
+          'Modul': f.modul,
+          'Menu': f.menu,
+          'Submenu': f.submenu,
+          'SubSubmenu': f.subsubmenu,
+          'Urut': int.tryParse(f.urut) ?? 0,
+          'Flag': true,
+        }).toList(),
       };
 
       if (kDebugMode) {
@@ -373,8 +416,10 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String batch,
     String? password,
     String? bprId,
+    String? namaKantor,
     String? hrmEmployeeId,
     bool hakOtor = false,
+    List<FasilitasModel>? akses,
   }) async {
     try {
       final dio     = await _dioWithToken();
@@ -386,6 +431,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'nohp':             noHp,
         'nip':              nip,
         'kd_kantor':        kdKantor,
+        'nama_kantor':      namaKantor ?? '',
         'hrm_employee_id':  hrmEmployeeId ?? '',
         'sbb_teller':       sbbTeller,
         'nama_sbb':         namaSbb,
@@ -395,6 +441,14 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'bpr_id':           bprId ?? session.bprId,
         'userlogin':        session.usersId,
         'term':             'WEB',
+        'akses': (akses ?? []).map((f) => {
+          'Modul': f.modul,
+          'Menu': f.menu,
+          'Submenu': f.submenu,
+          'SubSubmenu': f.subsubmenu,
+          'Urut': int.tryParse(f.urut) ?? 0,
+          'Flag': true,
+        }).toList(),
       };
 
       // password opsional saat edit — kirim hanya jika diisi

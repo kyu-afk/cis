@@ -11,7 +11,6 @@ import '../../utils/colors.dart';
 import '../../utils/user_level.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../data_petugas/data_petugas_notifier.dart';
-import '../data_petugas/data_petugas_stsrec.dart';
 
 // ==================== NOTIFIER ====================
 class _LaporanDataPetugasNotifier extends ChangeNotifier {
@@ -36,8 +35,9 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
 
   final searchCtrl = TextEditingController();
 
-  int get jumlahAktif => _list.where((p) => DataPetugasStsrec.isAktif(p)).length;
-  int get jumlahTidakAktif => _list.length - jumlahAktif;
+  int get jumlahDibuka => _list.where((p) => p.stsBukaTutup == 'A').length;
+  int get jumlahDitutup => _list.where((p) => p.stsBukaTutup == 'C').length;
+  int get jumlahDiblokir => _list.where((p) => p.stsBukaTutup == 'B').length;
 
   String getNamaKantor(String? kdKantor) {
     if (kdKantor == null || kdKantor.isEmpty) return '-';
@@ -71,6 +71,13 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
         final allList = data
             .map((item) => DataPetugasModel.fromJson(item as Map<String, dynamic>))
             .toList();
+
+        // PATCH: status buka/tutup diambil dari database lokal (sama persis
+        // sumber yang dipakai menu Buka/Tutup Transaksi, sudah terbukti
+        // akurat) — bukan dari field 'transaksi_kolektor' hasil middleware
+        // yang kadang gak sinkron sama tombol buka/tutup yang sebenarnya.
+        await _overrideBukaTutupFromLocalDb(allList);
+
         _list = UserLevelHelper.applyKantorFilter(
           list: allList,
           users: _sessionUser,
@@ -85,6 +92,34 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
     }
     _applyFilter();
     notifyListeners();
+  }
+
+  Future<void> _overrideBukaTutupFromLocalDb(List<DataPetugasModel> list) async {
+    try {
+      final dbResult = await CollectorRepository.inquiryCollectorDb(limit: 1000);
+      if (dbResult['value'] != 1) {
+        if (kDebugMode) print('BUKA_TUTUP: gagal ambil inquiry-db: ${dbResult['message']}');
+        return;
+      }
+      final List<dynamic> dbRows = dbResult['data'] ?? [];
+      final Map<String, String> stsByNoHp = {
+        for (final row in dbRows)
+          if ((row['nohp'] ?? '').toString().trim().isNotEmpty)
+            row['nohp'].toString().trim():
+                (row['stsaktif'] ?? 'C').toString().toUpperCase(),
+      };
+      for (final petugas in list) {
+        final key = (petugas.noHp ?? '').trim();
+        if (key.isEmpty) continue;
+        if (stsByNoHp.containsKey(key)) {
+          final sts = stsByNoHp[key]!;
+          petugas.stsBukaTutup = sts;
+          petugas.transaksiKolektor = sts == 'A';
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('BUKA_TUTUP: error override dari DB lokal: $e');
+    }
   }
 
   Future<void> _loadKantor() async {
@@ -121,10 +156,10 @@ class _LaporanDataPetugasNotifier extends ChangeNotifier {
             (p.nip ?? '').toLowerCase().contains(kw);
       }).toList();
     }
-    const order = {'aktif': 0, 'blokir': 1};
+    const order = {'A': 0, 'C': 1, 'B': 2};
     _filteredList.sort((a, b) {
-      final sa = order[DataPetugasStsrec.code(a)] ?? 9;
-      final sb = order[DataPetugasStsrec.code(b)] ?? 9;
+      final sa = order[a.stsBukaTutup] ?? 9;
+      final sb = order[b.stsBukaTutup] ?? 9;
       if (sa != sb) return sa.compareTo(sb);
       return (a.nama ?? '').toLowerCase().compareTo((b.nama ?? '').toLowerCase());
     });
@@ -201,8 +236,9 @@ class LaporanDataPetugasPage extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _badge('Total: ${notifier.list.length}', Colors.black),
-                  _badge('Aktif: ${notifier.jumlahAktif}', Colors.green),
-                  _badge('Tidak Aktif: ${notifier.jumlahTidakAktif}', Colors.red),
+                  _badge('Dibuka: ${notifier.jumlahDibuka}', Colors.green),
+                  _badge('Ditutup: ${notifier.jumlahDitutup}', Colors.red),
+                  _badge('Diblokir: ${notifier.jumlahDiblokir}', Colors.orange),
                 ],
               ),
               const Spacer(),
@@ -251,14 +287,10 @@ class LaporanDataPetugasPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns(_LaporanDataPetugasNotifier notifier) => [
         const AppGridColumn('no', 'No', width: 60, align: Alignment.center),
-        const AppGridColumn('nama', 'Nama Kolektor', width: 300),
-        const AppGridColumn('noHp', 'No HP', width: 270),
-        const AppGridColumn('kantor', 'Kantor', width: 280),
-        AppGridColumn('statusAkun', 'Status Akun',
-            width: 150,
-            align: Alignment.center,
-            cellBuilder: (value) => _statusBadge(value, _statusAkunColor(value.toString()))),
-        AppGridColumn('statusBukaTutup', 'Status Buka/Tutup',
+        const AppGridColumn('nama', 'Nama Kolektor', width: 360),
+        const AppGridColumn('noHp', 'No HP', width: 320),
+        const AppGridColumn('kantor', 'Kantor', width: 320),
+        AppGridColumn('statusBukaTutup', 'Status',
             width: 180,
             align: Alignment.center,
             cellBuilder: (value) => _statusBadge(value, _statusBukaTutupColor(value.toString()))),
@@ -267,32 +299,38 @@ class LaporanDataPetugasPage extends StatelessWidget {
   List<Map<String, dynamic>> _buildRows(_LaporanDataPetugasNotifier notifier) {
     int no = 0;
     return notifier.filteredList.map((p) {
-      final statusAkun = DataPetugasStsrec.statusFor(p);
-      final isDibuka = p.transaksiKolektor == true;
       return {
         'no': ++no,
         'nama': p.nama ?? '-',
         'noHp': p.noHp ?? '-',
         'kantor': notifier.getNamaKantor(p.kdKantor),
-        'statusAkun': statusAkun,
-        'statusBukaTutup': isDibuka ? 'Dibuka' : 'Ditutup',
+        'statusBukaTutup': _labelBukaTutup(p.stsBukaTutup),
       };
     }).toList();
   }
 
-  Color _statusAkunColor(String label) {
-    switch (label.toUpperCase()) {
-      case 'AKTIF':
-        return Colors.green;
-      case 'BLOKIR':
-        return Colors.orange;
+  String _labelBukaTutup(String? sts) {
+    switch (sts) {
+      case 'A':
+        return 'Dibuka';
+      case 'B':
+        return 'Diblokir';
+      case 'C':
       default:
-        return Colors.grey;
+        return 'Ditutup';
     }
   }
 
   Color _statusBukaTutupColor(String label) {
-    return label == 'Dibuka' ? Colors.blue : Colors.blueGrey;
+    switch (label) {
+      case 'Dibuka':
+        return Colors.green;
+      case 'Diblokir':
+        return Colors.orange;
+      case 'Ditutup':
+      default:
+        return Colors.red;
+    }
   }
 
   Widget _statusBadge(dynamic value, Color color) {

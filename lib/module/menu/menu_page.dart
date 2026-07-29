@@ -7,6 +7,8 @@ import 'package:cis_menu/module/kelola_kartu/update_status_page.dart';
 import 'package:cis_menu/module/kelola_foto/kelola_foto_page.dart';
 import 'package:cis_menu/module/laporan/laporan_transaksi_petugas_page.dart'; // 🔥 TAMBAHKAN
 import 'package:cis_menu/module/laporan/laporan_histori_transaksi_kolektor_page.dart';
+import 'package:cis_menu/module/reset_device/reset_device_teller_page.dart';
+import 'package:cis_menu/module/reset_device/reset_device_kolektor_page.dart';
 import 'package:cis_menu/module/menu/menu_notifier.dart';
 import 'package:cis_menu/module/mpin/cetak_mpin_page.dart';
 import 'package:cis_menu/module/mpin/generate_mpin_page.dart';
@@ -56,6 +58,8 @@ class MenuPage extends StatelessWidget {
     70: BukaTutupPetugasPage(),
     71: BukaTutupTellerPage(),
     80: KelolaFotoPage(),
+    90: ResetDeviceTellerPage(),
+    91: ResetDeviceKolektorPage(),
   };
 
   List<_MenuItem> _menuItems(MenuNotifier n) => [
@@ -95,6 +99,13 @@ class MenuPage extends StatelessWidget {
           _MenuItem('Teller', Icons.account_balance, page: 71,
               menu: 'BUKA & TUTUP TRANSAKSI', submenu: 'TELLER'),
         ]),
+        const _MenuItem('RESET DEVICE', Icons.phonelink_erase,
+            menu: 'RESET DEVICE', children: [
+          _MenuItem('Teller', Icons.account_balance, page: 90,
+              menu: 'RESET DEVICE', submenu: 'TELLER'),
+          _MenuItem('Kolektor', Icons.person_search, page: 91,
+              menu: 'RESET DEVICE', submenu: 'PETUGAS'),
+        ]),
         const _MenuItem('MODAL KOLEKTOR', Icons.account_balance_wallet,
             page: 50, menu: 'MODAL KOLEKTOR', submenu: 'MODAL KOLEKTOR'),
         const _MenuItem('KELOLA FOTO', Icons.photo_camera, page: 80,
@@ -106,11 +117,11 @@ class MenuPage extends StatelessWidget {
           _MenuItem('Data Teller', Icons.account_box, page: 62,
               menu: 'LAPORAN', submenu: 'DATA TELLER'),
           _MenuItem('Data Kolektor', Icons.badge, page: 63,
-              menu: 'LAPORAN', submenu: 'DATA PETUGAS'),
+              menu: 'LAPORAN', submenu: 'DATA KOLEKTOR'),
           _MenuItem('Transaksi Kolektor', Icons.receipt_long, page: 64, // 🔥 TAMBAHKAN
-              menu: 'LAPORAN', submenu: 'TRANSAKSI PETUGAS'),
+              menu: 'LAPORAN', submenu: 'TRANSAKSI KOLEKTOR'),
           _MenuItem('Histori Transaksi Kolektor', Icons.history_edu, page: 65,
-              menu: 'LAPORAN', submenu: 'HISTORI TRANSAKSI PETUGAS'),
+              menu: 'LAPORAN', submenu: 'HISTORI TRANSAKSI KOLEKTOR'),
         ]),
       ];
 

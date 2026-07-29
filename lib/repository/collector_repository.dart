@@ -194,9 +194,37 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
   // dari inquiryCollector() biasa (yang datanya dari middleware/webservice lama).
   //
   // Status yang dikembalikan tiap item: 'stsaktif' = 'A' (terbuka) atau 'C' (tertutup).
+  // ==================== RESET DEVICE ====================
+  // Kosongkan login_device_id, login_device_name, & fcm_token milik
+  // kolektor, supaya dia bisa login dari device lain.
+  static Future<Map<String, dynamic>> resetDevice({required String userid}) async {
+    try {
+      final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
+      final body = {
+        'bpr_id': session.bprId,
+        'userid': userid,
+        'userlogin': session.usersId,
+        'term': 'WEB',
+      };
+      if (kDebugMode) print('📤 RESET DEVICE COLLECTOR BODY: ${jsonEncode(body)}');
+      final response = await dio.post(NetworkURL.resetDeviceCollector(), data: body);
+      final decoded = _safeDecode(response.data);
+      if (kDebugMode) print('📥 RESET DEVICE COLLECTOR RESPONSE: $decoded');
+      return {
+        'value':   _mapCode(decoded),
+        'message': _mapMessage(decoded),
+      };
+    } catch (e) {
+      if (kDebugMode) print('❌ ERROR RESET DEVICE COLLECTOR: $e');
+      return {'value': 0, 'message': _dioErrorMessage(e)};
+    }
+  }
+
   static Future<Map<String, dynamic>> inquiryCollectorDb({
     String? filterNama,
     String? filterKdKantor,
+    String? search,
     String? bprId,
     int page = 1,
     int limit = 500,
@@ -206,6 +234,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
       final session = await Pref().getUsers();
       final body = {
         "nama": filterNama ?? "",
+        "search": search ?? "",
         "bpr_id": bprId ?? session.bprId,
         "kd_kantor": filterKdKantor ?? "",
         "page": page,
@@ -360,6 +389,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String noSbb,
     required String namaSbb,
     String? bprId,
+    String? namaKantor,
     String? hrmEmployeeId,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
@@ -377,6 +407,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "nohp": noHp,
         "nip": nip,
         "kd_kantor": kdKantor,
+        "nama_kantor": namaKantor ?? '',
         "hrm_employee_id": hrmEmployeeId ?? '',
         "kd_collector": kodePetugas,
         "nosbb": noSbb,
@@ -424,6 +455,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     required String namaSbb,
     String? password,
     String? bprId,
+    String? namaKantor,
     String? hrmEmployeeId,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
@@ -441,6 +473,7 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "nohp": noHp,
         "nip": nip,
         "kd_kantor": kdKantor,
+        "nama_kantor": namaKantor ?? '',
         "hrm_employee_id": hrmEmployeeId ?? '',
         "kd_collector": kodePetugas,
         "nosbb": noSbb,

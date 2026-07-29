@@ -75,7 +75,7 @@ class TransaksiModel {
       rrn: json['rrn']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       errorMsg: json['error_msg']?.toString() ?? '',
-      tglTrans: json['tgl_trans']?.toString() ?? '',
+      tglTrans: json['tgl_trans']?.toString() ?? json['tanggal']?.toString() ?? '',
       tanggalPosting: json['tanggal_posting']?.toString() ?? '',
       createdAt: json['created_at']?.toString() ?? '',
       biayaLayanan: json['biaya_layanan']?.toString() ?? '',

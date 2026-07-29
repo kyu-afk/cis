@@ -29,6 +29,12 @@ class DataTellerModel {
   bool? isTransaksiDibuka;
   bool? transaksiTeller;
   bool hakOtor;
+  // Status mentah buka/tutup: 'A' (dibuka), 'C' (ditutup), 'B' (diblokir admin).
+  // Diisi belakangan dari inquiry-db lokal (lihat laporan_data_teller_page.dart),
+  // bukan dari fromJson biasa — makanya tidak ada di constructor/fromJson.
+  String? stsBukaTutup;
+  // Fasilitas/menu akses (type "TELLER") yang sudah dipilih untuk teller ini.
+  List<AksesModel>? akses;
 
   DataTellerModel({
     this.id,
@@ -46,6 +52,7 @@ class DataTellerModel {
     this.isTransaksiDibuka,
     this.transaksiTeller,
     this.hakOtor = false,
+    this.akses,
   });
 
   factory DataTellerModel.fromJson(Map<String, dynamic> json) {
@@ -55,6 +62,15 @@ class DataTellerModel {
         return dateStr.split('T').first;
       }
       return dateStr;
+    }
+
+    final rawAkses = json['akses'];
+    List<AksesModel>? aksesList;
+    if (rawAkses is List) {
+      aksesList = rawAkses
+          .whereType<Map>()
+          .map((e) => AksesModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     }
 
     return DataTellerModel(
@@ -72,6 +88,7 @@ class DataTellerModel {
       isTransaksiDibuka: json['transaksi_teller'] == true,
       transaksiTeller: json['transaksi_teller'] == true,
       hakOtor: (json['hak_otor'] ?? 'N').toString().toUpperCase() == 'Y',
+      akses: aksesList,
     );
   }
 }
@@ -87,21 +104,6 @@ class KantorDummy {
       other is KantorDummy && other.kdKantor == kdKantor;
   @override
   int get hashCode => kdKantor.hashCode;
-}
-
-class FasilitasDummy {
-  final String modul;
-  final String menu;
-  final String submenu;
-  final String subsubmenu;
-  final String urut;
-  FasilitasDummy(this.modul, this.menu, this.submenu, this.subsubmenu, this.urut);
-
-  @override
-  bool operator ==(Object other) =>
-      other is FasilitasDummy && other.modul == modul && other.menu == menu && other.submenu == submenu;
-  @override
-  int get hashCode => Object.hash(modul, menu, submenu);
 }
 
 // ==================== NOTIFIER ====================
@@ -122,12 +124,6 @@ class DataTellerNotifier extends ChangeNotifier {
   
   List<KantorDummy> _listKantor = [];
   List<KantorDummy> get listKantor => _listKantor;
-  
-  List<FasilitasDummy> _listFasilitas = [];
-  List<FasilitasDummy> get listFasilitas => _listFasilitas;
-  
-  List<FasilitasDummy> _selectedFasilitas = [];
-  List<FasilitasDummy> get selectedFasilitas => _selectedFasilitas;
 
   // ==================== STATE ====================
   bool isLoading = true;
@@ -187,6 +183,22 @@ class DataTellerNotifier extends ChangeNotifier {
   }
 
   void selectHrmEmployee(HrmEmployeeModel emp) {
+    // PATCH: satu karyawan HRIS (hrm_employee_id) cuma boleh punya SATU akun
+    // teller aktif. Nama sengaja TIDAK dipakai buat cek ini — dua orang beda
+    // bisa aja namanya sama persis, tapi hrm_employee_id mereka pasti beda.
+    final existing = _list.where((t) => t.hrmEmployeeId != null &&
+        t.hrmEmployeeId!.isNotEmpty &&
+        t.hrmEmployeeId == emp.id).toList();
+    if (existing.isNotEmpty) {
+      _manualErrors['hrmEmployee'] =
+          'Karyawan ini sudah terdaftar sebagai teller dengan User ID "${existing.first.userId}". Satu karyawan HRIS hanya boleh punya satu akun teller.';
+      selectedHrmEmployee = null;
+      hrmSearchController.clear();
+      namaTellerCtrl.clear();
+      notifyListeners();
+      return;
+    }
+    _manualErrors.remove('hrmEmployee');
     selectedHrmEmployee = emp;
     hrmSearchController.text = emp.name;
     namaTellerCtrl.text = emp.name;
@@ -218,7 +230,7 @@ class DataTellerNotifier extends ChangeNotifier {
     if (empId == null || empId.isEmpty || name.isEmpty) return;
 
     try {
-      final results = await UsersAccessRepository.searchHrmEmployee(bprId: bprId, search: name);
+      final results = await UsersAccessRepository.searchHrmEmployee(bprId: bprId, search: name, applyKantorFilter: false);
       for (final raw in results) {
         final emp = HrmEmployeeModel.fromJson(raw);
         if (emp.id == empId) {
@@ -252,6 +264,7 @@ class DataTellerNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: bprId,
         search: name,
+        applyKantorFilter: false,
       );
       HrmEmployeeModel? emp;
       for (final raw in results) {
@@ -290,6 +303,7 @@ class DataTellerNotifier extends ChangeNotifier {
       final results = await UsersAccessRepository.searchHrmEmployee(
         bprId: bprId,
         search: (t.namaTeller ?? '').trim(),
+        applyKantorFilter: false,
       );
       HrmEmployeeModel? emp;
       for (final raw in results) {
@@ -396,6 +410,60 @@ class DataTellerNotifier extends ChangeNotifier {
   void setHakOtor(bool value) {
     hakOtor = value;
     notifyListeners();
+  }
+
+  // ==================== FASILITAS (akses menu, type "TELLER") ====================
+  // Pola sama persis dengan User Access, cuma type-nya "TELLER" bukan "CIS".
+  List<FasilitasModel> _listFasilitas = [];
+  List<FasilitasModel> get listFasilitas => _listFasilitas;
+
+  List<FasilitasModel> _selectedFasilitas = [];
+  List<FasilitasModel> get selectedFasilitas => _selectedFasilitas;
+
+  Future<void> loadFasilitas() async {
+    if (_sessionUser == null) return;
+    try {
+      final result = await UsersAccessRepository.getListFasilitas(
+        url: NetworkURL.getListFasilitas(),
+        userId: _sessionUser!.usersId,
+        bprId: _sessionUser!.bprId,
+        type: 'TELLER',
+      );
+      if (result['value'] == 1) {
+        final raw = result['data'] as List<dynamic>? ?? [];
+        _listFasilitas = raw
+            .map((e) => FasilitasModel.fromJson(e))
+            .where((f) => f.isActive == true)
+            .toList();
+      }
+    } catch (e) {
+      if (kDebugMode) print('ERROR LOAD FASILITAS TELLER: $e');
+    }
+    notifyListeners();
+  }
+
+  void toggleFasilitas(FasilitasModel f) {
+    if (_selectedFasilitas.contains(f)) {
+      _selectedFasilitas.remove(f);
+    } else {
+      _selectedFasilitas.add(f);
+    }
+    if (_selectedFasilitas.isNotEmpty && _manualErrors.containsKey('fasilitas')) {
+      _manualErrors.remove('fasilitas');
+    }
+    notifyListeners();
+  }
+
+  void _isiFasilitasDariTeller(DataTellerModel t) {
+    _selectedFasilitas = [];
+    if (t.akses != null) {
+      for (final a in t.akses!) {
+        final match = _listFasilitas
+            .where((f) => f.modul == a.modul && f.menu == a.menu && f.submenu == a.submenu)
+            .firstOrNull;
+        if (match != null) _selectedFasilitas.add(match);
+      }
+    }
   }
 
   // Limit transaksi controllers (min & max per tcode)
@@ -548,6 +616,13 @@ class DataTellerNotifier extends ChangeNotifier {
       errors['hrmEmployee'] = 'Wajib pilih karyawan dari HRIS terlebih dahulu';
       allValid = false;
       if (firstErrorKey == null) firstErrorKey = 'hrmEmployee';
+    }
+
+    // Fasilitas (wajib untuk tambah & edit) — minimal 1 harus dicentang.
+    if ((isTambah || isEdit) && _selectedFasilitas.isEmpty) {
+      errors['fasilitas'] = 'Pilih minimal 1 fasilitas';
+      allValid = false;
+      if (firstErrorKey == null) firstErrorKey = 'fasilitas';
     }
     
     // Nama Teller (tambah dan edit)
@@ -1026,6 +1101,7 @@ class DataTellerNotifier extends ChangeNotifier {
     bprId = users.bprId;
     userLogin = users.usersId;
     await _loadData();
+    await loadFasilitas();
   }
 
   Future<void> _loadData() async {
@@ -1039,6 +1115,12 @@ class DataTellerNotifier extends ChangeNotifier {
           .map((e) => DataTellerModel.fromJson(Map<String, dynamic>.from(e)))
           .where((teller) => teller.status?.toLowerCase() != 'hapus')
           .toList();
+
+      // PATCH: hak_otor diambil TERPISAH dari database lokal (bukan dari hasil
+      // "gabung data" di sisi Go lagi) — pakai endpoint inquiry-db yang sama
+      // persis dengan yang dipakai Buka/Tutup Transaksi (sudah terbukti akurat),
+      // lalu dicocokkan per userid di sini supaya gampang dicek/di-debug.
+      await _overrideHakOtorFromLocalDb(allList);
 
       _buildUserIdLookupFromEnrichedList(allList);
       _list = UserLevelHelper.applyKantorFilter(
@@ -1056,6 +1138,35 @@ class DataTellerNotifier extends ChangeNotifier {
 
     isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> _overrideHakOtorFromLocalDb(List<DataTellerModel> list) async {
+    try {
+      final dbResult = await TellerRepository.inquiryTellerDb(bprId: bprId, limit: 1000);
+      if (dbResult['value'] != 1) {
+        if (kDebugMode) print('HAK_OTOR: gagal ambil inquiry-db: ${dbResult['message']}');
+        return;
+      }
+      final List<dynamic> dbRows = dbResult['data'] ?? [];
+      final Map<String, bool> hakOtorByUserId = {
+        for (final row in dbRows)
+          if ((row['userid'] ?? '').toString().trim().isNotEmpty)
+            row['userid'].toString().trim().toUpperCase():
+                (row['hak_otor'] ?? 'N').toString().toUpperCase() == 'Y',
+      };
+
+      if (kDebugMode) print('HAK_OTOR MAP DARI DB LOKAL: $hakOtorByUserId');
+
+      for (final teller in list) {
+        final key = (teller.userId ?? '').trim().toUpperCase();
+        if (key.isEmpty) continue;
+        if (hakOtorByUserId.containsKey(key)) {
+          teller.hakOtor = hakOtorByUserId[key]!;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('HAK_OTOR: error override dari DB lokal: $e');
+    }
   }
 
   Future<void> _loadKantor() async {
@@ -1214,7 +1325,7 @@ class DataTellerNotifier extends ChangeNotifier {
       (k) => k.kdKantor == teller.kdKantor,
       orElse: () => _listKantor.isNotEmpty ? _listKantor.first : KantorDummy('', '', ''),
     );
-    _selectedFasilitas.clear();
+    _isiFasilitasDariTeller(teller);
     unawaited(_loadHrmEmployeeForEdit(teller));
 
     _isInternalChange = false;
@@ -1404,6 +1515,14 @@ class DataTellerNotifier extends ChangeNotifier {
       changes['Hak Otorisasi'] = {
         'old': old.hakOtor ? 'Ya' : 'Tidak',
         'new': hakOtor ? 'Ya' : 'Tidak',
+      };
+    }
+
+    final oldFasilitasCount = old.akses?.length ?? 0;
+    if (oldFasilitasCount != _selectedFasilitas.length) {
+      changes['Fasilitas'] = {
+        'old': '$oldFasilitasCount item dipilih',
+        'new': '${_selectedFasilitas.length} item dipilih',
       };
     }
     
@@ -1819,6 +1938,8 @@ class DataTellerNotifier extends ChangeNotifier {
                           _konfirmasiRow('Batch', batchCtrl.text.trim()),
                           const SizedBox(height: 6),
                           _konfirmasiRow('Hak Otorisasi', hakOtor ? 'Ya' : 'Tidak'),
+                          const SizedBox(height: 6),
+                          _konfirmasiRow('Fasilitas', '${_selectedFasilitas.length} item dipilih'),
                         ],
                       ),
                     ),
@@ -1953,6 +2074,7 @@ class DataTellerNotifier extends ChangeNotifier {
           noHp: '',
           nip: '',
           kdKantor: selectedKantor?.kdKantor ?? '',
+          namaKantor: selectedKantor?.namaKantor,
           sbbTeller: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           tanggalExpired: tglCtrl.text.trim().length > 10
@@ -1962,6 +2084,7 @@ class DataTellerNotifier extends ChangeNotifier {
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id,
           hakOtor: hakOtor,
+          akses: _selectedFasilitas,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();
@@ -1974,6 +2097,7 @@ class DataTellerNotifier extends ChangeNotifier {
           noHp: '',
           nip: '',
           kdKantor: selectedKantor?.kdKantor ?? '',
+          namaKantor: selectedKantor?.namaKantor,
           sbbTeller: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           tanggalExpired: tglCtrl.text.trim().length > 10
@@ -1984,6 +2108,7 @@ class DataTellerNotifier extends ChangeNotifier {
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id ?? selectedTeller?.hrmEmployeeId,
           hakOtor: hakOtor,
+          akses: _selectedFasilitas,
         );
         if (result['value'] == 1) {
           await _saveLimitTellerResolved();
@@ -2114,18 +2239,6 @@ class DataTellerNotifier extends ChangeNotifier {
       }
       notifyListeners();
     }
-  }
-
-  void toggleFasilitas(FasilitasDummy f) {
-    if (_selectedFasilitas.contains(f)) {
-      _selectedFasilitas.remove(f);
-    } else {
-      _selectedFasilitas.add(f);
-    }
-    if (_selectedFasilitas.isNotEmpty && _manualErrors.containsKey('fasilitas')) {
-      _manualErrors.remove('fasilitas');
-    }
-    notifyListeners();
   }
 
   void setSelectedKantor(KantorDummy? kantor) {

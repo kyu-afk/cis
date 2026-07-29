@@ -18,6 +18,7 @@ import '../../models/index.dart';
 import '../../models/transaksi_model.dart';
 import '../../pref/pref.dart';
 import '../../repository/transaksi_repository.dart';
+import '../../repository/setup_transaksi_repository.dart';
 import '../../utils/colors.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../../utils/widgets/searchable_dropdown_petugas.dart';
@@ -36,22 +37,24 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
   bool isLoading = true;
   UsersModel? _sessionUser;
 
-  // ── Filter: Status ──
-  // Sesuai response asli: 'pending', 'failed'. Nilai untuk status berhasil
-  // diasumsikan 'success' — sesuaikan kalau ternyata beda begitu ada
-  // transaksi berhasil yang bisa dicek langsung dari API.
+  // Status sesuai nilai ASLI di kolom cis_settlement_items.status
+  // (ditemukan dari data: ada, posted, failed, hapus, pending_otor).
   String _selectedStatus = 'SEMUA';
   String get selectedStatus => _selectedStatus;
-  final List<String> statusOptions = const ['SEMUA', 'PENDING', 'BERHASIL', 'GAGAL'];
+  final List<String> statusOptions = const ['SEMUA', 'ADA', 'POSTED', 'PENDING OTOR', 'FAILED', 'HAPUS'];
 
   String _getStatusValue(String selectedStatus) {
     switch (selectedStatus) {
-      case 'PENDING':
-        return 'pending';
-      case 'BERHASIL':
-        return 'success';
-      case 'GAGAL':
+      case 'ADA':
+        return 'ada';
+      case 'POSTED':
+        return 'posted';
+      case 'PENDING OTOR':
+        return 'pending_otor';
+      case 'FAILED':
         return 'failed';
+      case 'HAPUS':
+        return 'hapus';
       default:
         return '';
     }
@@ -59,12 +62,16 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
 
   String getNamaStatus(String? status) {
     switch (status?.toLowerCase()) {
-      case 'pending':
-        return 'PENDING';
-      case 'success':
-        return 'BERHASIL';
+      case 'ada':
+        return 'ADA';
+      case 'posted':
+        return 'POSTED';
+      case 'pending_otor':
+        return 'PENDING OTOR';
       case 'failed':
         return 'GAGAL';
+      case 'hapus':
+        return 'DIHAPUS';
       default:
         return (status ?? '-').toUpperCase();
     }
@@ -77,21 +84,41 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
 
   int get totalData => _tableRows.length;
 
+  // Terjemahan trx_code -> keterangan, sumbernya sama persis dengan
+  // "Setup Transaksi Collector" (SetupTransaksiRepository.listTcode()).
+  Map<String, String> _tcodeKeterangan = {};
+
   List<Map<String, dynamic>> _tableRows = [];
   List<Map<String, dynamic>> get tableRows => _tableRows;
 
   Future<void> _init() async {
     _sessionUser = await Pref().getUsers();
+    await _loadTcodeKeterangan();
     await loadData();
+  }
+
+  Future<void> _loadTcodeKeterangan() async {
+    try {
+      final result = await SetupTransaksiRepository.listTcode();
+      if (result['value'] == 1) {
+        final List<dynamic> data = result['data'] ?? [];
+        _tcodeKeterangan = {
+          for (final e in data)
+            (e['tcode'] ?? '').toString(): (e['keterangan'] ?? '').toString(),
+        };
+      }
+    } catch (e) {
+      if (kDebugMode) print('ERROR LOAD TCODE: $e');
+    }
   }
 
   Future<void> loadData() async {
     if (_sessionUser == null) return;
 
     // Tabel HANYA terisi kalau kolektor sudah dipilih — endpoint wajib
-    // kirim userid & nohp, jadi kalau belum ada kolektor, jangan hit API.
+    // kirim userid/nohp, jadi kalau belum ada kolektor, jangan hit API.
     final kolektor = _selectedKolektor;
-    if (kolektor == null || (kolektor.userId ?? '').isEmpty || (kolektor.noHp ?? '').isEmpty) {
+    if (kolektor == null || (kolektor.userId ?? '').isEmpty) {
       _list = [];
       _buildTableRows();
       isLoading = false;
@@ -103,23 +130,20 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await TransaksiRepository.inquiryTransaksiTodayCollme(
-        userid: kolektor.userId!,
-        nohp: kolektor.noHp!,
+      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final statusValue = _selectedStatus == 'SEMUA' ? null : _getStatusValue(_selectedStatus);
+
+      final result = await TransaksiRepository.inquirySettlementItemsDb(
+        userid: kolektor.userId,
+        nohp: kolektor.noHp,
+        tglFrom: todayStr,
+        tglTo: todayStr,
+        status: statusValue,
       );
 
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
-        var list = data.map((item) => TransaksiModel.fromJson(item)).toList();
-
-        // Status difilter di client — endpoint /api/transaksi/today tidak
-        // menerima parameter status, jadi semua transaksi hari ini datang
-        // sekaligus lalu disaring di sini.
-        if (_selectedStatus != 'SEMUA') {
-          final statusValue = _getStatusValue(_selectedStatus);
-          list = list.where((t) => (t.status ?? '').toLowerCase() == statusValue).toList();
-        }
-
+        final list = data.map((item) => TransaksiModel.fromJson(item)).toList();
         list.sort((a, b) {
           final dateA = _parseDate(a.tglTrans);
           final dateB = _parseDate(b.tglTrans);
@@ -165,13 +189,15 @@ class LaporanTransaksiKolektorNotifier extends ChangeNotifier {
       final index = entry.key;
       final item = entry.value;
 
-      // Kolom "Transaksi": pakai keterangan kalau ada, kalau kosong
-      // (seperti di response contoh) fallback ke trx_code.
-      final transaksiLabel = (item.keterangan != null && item.keterangan!.isNotEmpty)
-          ? item.keterangan!
-          : (item.trxCode != null && item.trxCode!.isNotEmpty)
-              ? item.trxCode!
-              : '-';
+      // Kolom "Transaksi": prioritas ambil dari daftar Setup Transaksi
+      // Collector (trx_code -> keterangan), fallback ke keterangan bawaan
+      // transaksi itu sendiri kalau tcode-nya gak ketemu di daftar.
+      final transaksiLabel = _tcodeKeterangan[item.trxCode] ??
+          ((item.keterangan != null && item.keterangan!.isNotEmpty)
+              ? item.keterangan!
+              : (item.trxCode != null && item.trxCode!.isNotEmpty)
+                  ? item.trxCode!
+                  : '-');
 
       return {
         'no': (index + 1).toString(),
@@ -306,11 +332,11 @@ class LaporanTransaksiPetugasPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns() => [
         const AppGridColumn('keterangan', 'Transaksi', width: 200, align: Alignment.centerLeft),
-        const AppGridColumn('status', 'Status', width: 140, align: Alignment.centerLeft),
-        const AppGridColumn('tgl_trans', 'Tanggal', width: 150, align: Alignment.centerLeft),
-        const AppGridColumn('nama', 'Nama', width: 220, align: Alignment.centerLeft),
-        const AppGridColumn('no_rek', 'No Rek', width: 190, align: Alignment.centerLeft),
-        AppGridColumn('jumlah', 'Nilai', width: 160, align: Alignment.centerRight, headerAlign: Alignment.centerLeft),
+        const AppGridColumn('status', 'Status', width: 160, align: Alignment.centerLeft),
+        const AppGridColumn('tgl_trans', 'Tanggal', width: 180, align: Alignment.centerLeft),
+        const AppGridColumn('nama', 'Nama', width: 260, align: Alignment.centerLeft),
+        const AppGridColumn('no_rek', 'No Rek', width: 220, align: Alignment.centerLeft),
+        AppGridColumn('jumlah', 'Nilai', width: 180, align: Alignment.centerRight, headerAlign: Alignment.centerLeft),
       ];
 
   Widget _buildFilterSection(LaporanTransaksiKolektorNotifier notifier) {

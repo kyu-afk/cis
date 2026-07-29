@@ -1,19 +1,5 @@
 import '../pref/pref.dart';
 
-/// Filter hasil inquiry berdasarkan bpr_id & kode_kantor milik user yang
-/// sedang login, supaya user tidak bisa melihat data BPR/kantor lain
-/// meskipun (karena satu dan lain hal) data tsb ikut terbawa di response API.
-///
-/// PENTING:
-/// - Filter bpr_id HANYA dipakai kalau request inquiry-nya memang mengirim
-///   bpr_id (parameter [sentBprId] = true).
-/// - Filter kode_kantor HANYA dipakai kalau request inquiry-nya memang
-///   mengirim kode_kantor (parameter [sentKodeKantor] = true).
-/// - Kalau parameter itu tidak dikirim di request, filter yang bersangkutan
-///   TIDAK diaktifkan. Ini untuk menghindari semua data hilang karena
-///   dianggap null saat memang inquiry-nya tidak mengirim bpr_id/kode_kantor.
-/// - Kode kantor "000" (kantor pusat) di-skip dari filter kode_kantor karena
-///   berarti user tsb punya akses ke semua kantor.
 class InquiryFilter {
   InquiryFilter._();
 
