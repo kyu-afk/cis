@@ -65,10 +65,9 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
     final result = await CollectorRepository.inquiryCollector(limit: 500);
     if (result['value'] == 1) {
       final List<dynamic> data = result['data'] ?? [];
-      final allAktif = data
+      final allFiltered = data
           .map((item) => DataPetugasModel.fromJson(item as Map<String, dynamic>))
           .where((p) {
-            if (p.status?.toLowerCase() != 'aktif') return false;
             if (widget.additionalFilter != null && !widget.additionalFilter!(p)) return false;
             return true;
           })
@@ -76,7 +75,7 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
 
       // Filter per kode kantor untuk user biasa (lvl1)
       _allPetugas = UserLevelHelper.applyKantorFilter(
-        list: allAktif,
+        list: allFiltered,
         users: sessionUser,
         getKdKantor: (p) => p.kdKantor,
       );

@@ -39,6 +39,13 @@ class AppDataGrid extends StatefulWidget {
   final EdgeInsetsGeometry margin;
   final void Function(Map<String, dynamic> rowData, String field)? onCellTap;
   final void Function(Map<String, dynamic> rowData)? onActionTap;
+  // Opsional — dipanggil dengan daftar baris (Map asli, bukan DataGridRow)
+  // yang SEDANG TAMPIL setiap kali halaman berpindah (termasuk saat data
+  // pertama kali dimuat / page 0). Dipakai untuk lazy-load data tambahan
+  // per-baris hanya untuk baris yang benar-benar terlihat, bukan semua rows
+  // sekaligus. Default null -- pemakai lama yang tidak butuh ini tidak
+  // terpengaruh sama sekali.
+  final void Function(List<Map<String, dynamic>> visibleRows)? onPageChanged;
 
   const AppDataGrid({
     super.key,
@@ -50,6 +57,7 @@ class AppDataGrid extends StatefulWidget {
     this.margin = const EdgeInsets.symmetric(horizontal: 20),
     this.onCellTap,
     this.onActionTap,
+    this.onPageChanged,
   });
 
   @override
@@ -68,7 +76,17 @@ class _AppDataGridState extends State<AppDataGrid> {
       pageSize: widget.pageSize,
       onCellTap: widget.onCellTap,
       onActionTap: widget.onActionTap,
+      onPageChanged: widget.onPageChanged,
     );
+    // Halaman pertama juga perlu dilaporkan -- _AppDataGridSource sudah
+    // _loadPage(0) di constructor-nya (sebelum onPageChanged sempat
+    // ke-assign kalau dilakukan di sana), jadi trigger manual sekali di
+    // sini supaya page 0 juga ikut lazy-load, bukan cuma page 1 dst.
+    if (widget.onPageChanged != null && widget.rows.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPageChanged!(_source.currentPageRowsData);
+      });
+    }
   }
 
   @override
@@ -77,6 +95,14 @@ class _AppDataGridState extends State<AppDataGrid> {
     // Update columns (termasuk onActionTap closure terbaru) DAN rows
     _source.updateColumns(widget.columns);
     _source.updateRows(widget.rows);
+    // updateRows() di atas selalu _loadPage(0) -- laporkan balik halaman
+    // pertama yang baru itu juga (mis. rows berubah krn filter/pencarian),
+    // sama seperti yang dilakukan initState untuk load awal.
+    if (widget.onPageChanged != null && widget.rows.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPageChanged!(_source.currentPageRowsData);
+      });
+    }
   }
 
   double get _pageCount {
@@ -178,6 +204,7 @@ class _AppDataGridSource extends DataGridSource {
     required this.pageSize,
     this.onCellTap,
     this.onActionTap,
+    this.onPageChanged,
   }) {
     _columns = columns;
     _allRows = rows;
@@ -188,9 +215,14 @@ class _AppDataGridSource extends DataGridSource {
   final int pageSize;
   final void Function(Map<String, dynamic> rowData, String field)? onCellTap;
   final void Function(Map<String, dynamic> rowData)? onActionTap;
+  final void Function(List<Map<String, dynamic>> visibleRows)? onPageChanged;
 
   late List<Map<String, dynamic>> _allRows;
   List<DataGridRow> _pageRows = [];
+  List<Map<String, dynamic>> _pageRowsData = [];
+
+  /// Data mentah (Map asli) untuk baris yang lagi tampil di halaman aktif.
+  List<Map<String, dynamic>> get currentPageRowsData => _pageRowsData;
 
   /// Dipanggil dari didUpdateWidget — pastikan onActionTap closure selalu fresh
   void updateColumns(List<AppGridColumn> columns) {
@@ -207,10 +239,13 @@ class _AppDataGridSource extends DataGridSource {
     final start = pageIndex * pageSize;
     if (start >= _allRows.length) {
       _pageRows = [];
+      _pageRowsData = [];
       return;
     }
     final end = math.min(start + pageSize, _allRows.length);
-    _pageRows = _allRows.sublist(start, end).asMap().entries.map((entry) {
+    final pageSlice = _allRows.sublist(start, end);
+    _pageRowsData = pageSlice;
+    _pageRows = pageSlice.asMap().entries.map((entry) {
       final globalIndex = start + entry.key;
       final item = entry.value;
       return DataGridRow(
@@ -230,6 +265,7 @@ class _AppDataGridSource extends DataGridSource {
   Future<bool> handlePageChange(int oldPageIndex, int newPageIndex) async {
     _loadPage(newPageIndex);
     notifyDataSourceListeners();
+    if (onPageChanged != null) onPageChanged!(_pageRowsData);
     return true;
   }
 

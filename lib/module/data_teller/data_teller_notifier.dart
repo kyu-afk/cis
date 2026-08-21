@@ -9,6 +9,7 @@ import '../../repository/users_access_repository.dart';
 import '../../network/network.dart';
 import '../../utils/colors.dart';
 import '../../utils/user_level.dart';
+import '../../utils/limit_universal_validator.dart';
 import 'data_teller_stsrec.dart';
 import 'package:flutter/foundation.dart';
 
@@ -142,12 +143,15 @@ class DataTellerNotifier extends ChangeNotifier {
 
   // Snapshot nilai limit transaksi SAAT DIMUAT dari server, dipakai buat
   // bandingan "Sebelum -> Sesudah" di popup konfirmasi & deteksi perubahan.
-  String _originalMinSetorTunai = '';
+  String _originalMinSetorTunai   = '';
   String _originalLimitSetorTunai = '';
-  String _originalMinTarikTunai = '';
+  String _originalMaxSetorTunai   = '';
+  String _originalMinTarikTunai   = '';
   String _originalLimitTarikTunai = '';
-  String _originalMinPindahBuku = '';
+  String _originalMaxTarikTunai   = '';
+  String _originalMinPindahBuku   = '';
   String _originalLimitPindahBuku = '';
+  String _originalMaxPindahBuku   = '';
 
   // Manual errors
   Map<String, String> _manualErrors = {};
@@ -467,12 +471,15 @@ class DataTellerNotifier extends ChangeNotifier {
   }
 
   // Limit transaksi controllers (min & max per tcode)
-  final limitMinSetorTunaiCtrl  = TextEditingController(); // tcode 1000 min
-  final limitSetorTunaiCtrl     = TextEditingController(); // tcode 1000 max
-  final limitMinTarikTunaiCtrl  = TextEditingController(); // tcode 1100 min
-  final limitTarikTunaiCtrl     = TextEditingController(); // tcode 1100 max
-  final limitMinPindahBukuCtrl  = TextEditingController(); // tcode 2300 min
-  final limitPindahBukuCtrl     = TextEditingController(); // tcode 2300 max
+  final limitMinSetorTunaiCtrl      = TextEditingController(); // tcode 1000 min
+  final limitSetorTunaiCtrl         = TextEditingController(); // tcode 1000 pending (limit_nominal)
+  final limitMaxSetorTunaiCtrl      = TextEditingController(); // tcode 1000 max
+  final limitMinTarikTunaiCtrl      = TextEditingController(); // tcode 1100 min
+  final limitTarikTunaiCtrl         = TextEditingController(); // tcode 1100 pending (limit_nominal)
+  final limitMaxTarikTunaiCtrl      = TextEditingController(); // tcode 1100 max
+  final limitMinPindahBukuCtrl      = TextEditingController(); // tcode 2300 min
+  final limitPindahBukuCtrl         = TextEditingController(); // tcode 2300 pending (limit_nominal)
+  final limitMaxPindahBukuCtrl      = TextEditingController(); // tcode 2300 max
 
   // Keys
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -704,17 +711,17 @@ class DataTellerNotifier extends ChangeNotifier {
       }
     }
 
-    // Limit transaksi: Min gak boleh lebih besar dari Limit/Max (tambah dan edit)
+    // Limit transaksi: urutan min < pending < max (tambah dan edit)
     if (isTambah || isEdit) {
-      if (!_validateMinMaxLimit('limitSetor', limitMinSetorTunaiCtrl, limitSetorTunaiCtrl, errors)) {
+      if (!_validateLimitOrdering('limitSetor', limitMinSetorTunaiCtrl, limitSetorTunaiCtrl, limitMaxSetorTunaiCtrl, errors)) {
         allValid = false;
         if (firstErrorKey == null) firstErrorKey = 'limitSetor';
       }
-      if (!_validateMinMaxLimit('limitTarik', limitMinTarikTunaiCtrl, limitTarikTunaiCtrl, errors)) {
+      if (!_validateLimitOrdering('limitTarik', limitMinTarikTunaiCtrl, limitTarikTunaiCtrl, limitMaxTarikTunaiCtrl, errors)) {
         allValid = false;
         if (firstErrorKey == null) firstErrorKey = 'limitTarik';
       }
-      if (!_validateMinMaxLimit('limitPindah', limitMinPindahBukuCtrl, limitPindahBukuCtrl, errors)) {
+      if (!_validateLimitOrdering('limitPindah', limitMinPindahBukuCtrl, limitPindahBukuCtrl, limitMaxPindahBukuCtrl, errors)) {
         allValid = false;
         if (firstErrorKey == null) firstErrorKey = 'limitPindah';
       }
@@ -726,21 +733,75 @@ class DataTellerNotifier extends ChangeNotifier {
     return {'isValid': allValid, 'firstErrorKey': firstErrorKey};
   }
 
-  // Min limit gak boleh lebih besar dari Max/Limit. Kalau salah satu kosong
-  // (berarti gak diisi/gak dipakai) ya gak divalidasi.
-  bool _validateMinMaxLimit(String key, TextEditingController minCtrl, TextEditingController maxCtrl, Map<String, String> errors) {
-    final minStr = minCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
-    final maxStr = maxCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
-    if (minStr.isEmpty || maxStr.isEmpty) return true;
+  // Validasi urutan: min < pending < max.
+  // Aturan: field kosong (0) dianggap tidak dipakai dan dilewati.
+  // Jika pending diisi, ia HARUS di antara min dan max.
+  bool _validateLimitOrdering(
+    String key,
+    TextEditingController minCtrl,
+    TextEditingController pendingCtrl,
+    TextEditingController maxCtrl,
+    Map<String, String> errors,
+  ) {
+    int _parse(TextEditingController ctrl) =>
+        int.tryParse(ctrl.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
 
-    final minVal = int.tryParse(minStr) ?? 0;
-    final maxVal = int.tryParse(maxStr) ?? 0;
+    final minVal     = _parse(minCtrl);
+    final pendingVal = _parse(pendingCtrl);
+    final maxVal     = _parse(maxCtrl);
 
-    if (minVal > maxVal) {
-      errors[key] = 'Min tidak boleh lebih besar dari Limit/Max';
+    // min harus < max (jika keduanya diisi)
+    if (minVal > 0 && maxVal > 0 && minVal >= maxVal) {
+      errors[key] = 'Min harus lebih kecil dari Maks';
+      return false;
+    }
+    // pending harus > min (jika pending dan min diisi)
+    if (pendingVal > 0 && minVal > 0 && pendingVal <= minVal) {
+      errors[key] = 'Pending harus lebih besar dari Min';
+      return false;
+    }
+    // pending harus < max (jika pending dan max diisi)
+    if (pendingVal > 0 && maxVal > 0 && pendingVal >= maxVal) {
+      errors[key] = 'Pending harus lebih kecil dari Maks';
       return false;
     }
     return true;
+  }
+
+  // Validasi silang ke Limit Transaksi universal (lihat
+  // utils/limit_universal_validator.dart). ASYNC karena butuh fetch
+  // batas universal dari server -- dipanggil terpisah dari
+  // validateAllFieldsManually() (yang sinkron) di executeAction(),
+  // SEBELUM validasi manual itu jalan. Return null kalau valid /
+  // gagal fetch batas universal (jangan salah tolak isian valid
+  // gara-gara offline), atau pesan gabungan semua pelanggaran.
+  Future<String?> validateLimitUniversal() async {
+    final ranges = await LimitUniversalValidator.fetchRanges();
+    if (ranges == null) return null;
+
+    double? _parse(String text) {
+      final raw = text.replaceAll(RegExp(r'[^\d]'), '').trim();
+      if (raw.isEmpty) return null;
+      return double.tryParse(raw);
+    }
+
+    final errors = <String>[];
+    void check(String label, TextEditingController minCtrl, TextEditingController maxCtrl) {
+      final err = LimitUniversalValidator.validateField(
+        ranges: ranges,
+        label: label,
+        minVal: _parse(minCtrl.text),
+        maxVal: _parse(maxCtrl.text),
+      );
+      if (err != null) errors.add(err);
+    }
+
+    check('Setor Tunai (1000)', limitMinSetorTunaiCtrl, limitMaxSetorTunaiCtrl);
+    check('Tarik Tunai (1100)', limitMinTarikTunaiCtrl, limitMaxTarikTunaiCtrl);
+    check('Pindah Buku (2300)', limitMinPindahBukuCtrl, limitMaxPindahBukuCtrl);
+
+    if (errors.isEmpty) return null;
+    return errors.join('\n');
   }
 
   String? _validateUserIdManual(String value) {
@@ -1275,20 +1336,26 @@ class DataTellerNotifier extends ChangeNotifier {
     batchCtrl.clear();
     limitMinSetorTunaiCtrl.clear();
     limitSetorTunaiCtrl.clear();
+    limitMaxSetorTunaiCtrl.clear();
     limitMinTarikTunaiCtrl.clear();
     limitTarikTunaiCtrl.clear();
+    limitMaxTarikTunaiCtrl.clear();
     limitMinPindahBukuCtrl.clear();
     limitPindahBukuCtrl.clear();
+    limitMaxPindahBukuCtrl.clear();
     _isInternalChange = false;
     
     _originalNoSbb = '';
     _originalNamaSbb = '';
-    _originalMinSetorTunai = '';
+    _originalMinSetorTunai   = '';
     _originalLimitSetorTunai = '';
-    _originalMinTarikTunai = '';
+    _originalMaxSetorTunai   = '';
+    _originalMinTarikTunai   = '';
     _originalLimitTarikTunai = '';
-    _originalMinPindahBuku = '';
+    _originalMaxTarikTunai   = '';
+    _originalMinPindahBuku   = '';
     _originalLimitPindahBuku = '';
+    _originalMaxPindahBuku   = '';
     
     isChangePassword = false;
     obscure = true;
@@ -1313,10 +1380,13 @@ class DataTellerNotifier extends ChangeNotifier {
     isChangePassword = false;
     limitMinSetorTunaiCtrl.clear();
     limitSetorTunaiCtrl.clear();
+    limitMaxSetorTunaiCtrl.clear();
     limitMinTarikTunaiCtrl.clear();
     limitTarikTunaiCtrl.clear();
+    limitMaxTarikTunaiCtrl.clear();
     limitMinPindahBukuCtrl.clear();
     limitPindahBukuCtrl.clear();
+    limitMaxPindahBukuCtrl.clear();
 
     _originalNoSbb = teller.noSbb ?? '';
     _originalNamaSbb = teller.namasbb ?? '';
@@ -1354,12 +1424,15 @@ class DataTellerNotifier extends ChangeNotifier {
       await TellerRepository.saveLimitTeller(
         userId: uid,
         backendId: selectedTeller?.id,
-        minSetorTunai:  _parseLimitNominal(limitMinSetorTunaiCtrl.text),
+        minSetorTunai:   _parseLimitNominal(limitMinSetorTunaiCtrl.text),
         limitSetorTunai: _parseLimitNominal(limitSetorTunaiCtrl.text),
-        minTarikTunai:  _parseLimitNominal(limitMinTarikTunaiCtrl.text),
+        maxSetorTunai:   _parseLimitNominal(limitMaxSetorTunaiCtrl.text),
+        minTarikTunai:   _parseLimitNominal(limitMinTarikTunaiCtrl.text),
         limitTarikTunai: _parseLimitNominal(limitTarikTunaiCtrl.text),
-        minPindahBuku:  _parseLimitNominal(limitMinPindahBukuCtrl.text),
+        maxTarikTunai:   _parseLimitNominal(limitMaxTarikTunaiCtrl.text),
+        minPindahBuku:   _parseLimitNominal(limitMinPindahBukuCtrl.text),
         limitPindahBuku: _parseLimitNominal(limitPindahBukuCtrl.text),
+        maxPindahBuku:   _parseLimitNominal(limitMaxPindahBukuCtrl.text),
         bprId: bprId,
       );
     } catch (e) {
@@ -1378,34 +1451,42 @@ class DataTellerNotifier extends ChangeNotifier {
         final limits = result['limits'] as List<dynamic>;
         final _rupiahFmt = NumberFormat('#,###', 'id_ID');
         for (final l in limits) {
-          final tcode = l['tcode']?.toString() ?? '';
-          final nominal = (l['limit_nominal'] as num?)?.toDouble() ?? 0.0;
-          final minNominal = (l['min_nominal'] as num?)?.toDouble() ?? 0.0;
-          final formatted = nominal == 0 ? '' : _rupiahFmt.format(nominal.toInt());
-          final minFormatted = minNominal == 0 ? '' : _rupiahFmt.format(minNominal.toInt());
+          final tcode       = l['tcode']?.toString() ?? '';
+          final minNominal  = (l['min_nominal']   as num?)?.toDouble() ?? 0.0;
+          final limNominal  = (l['limit_nominal'] as num?)?.toDouble() ?? 0.0;
+          final maxNominal  = (l['max_nominal']   as num?)?.toDouble() ?? 0.0;
+          final minFmt = minNominal == 0 ? '' : _rupiahFmt.format(minNominal.toInt());
+          final limFmt = limNominal == 0 ? '' : _rupiahFmt.format(limNominal.toInt());
+          final maxFmt = maxNominal == 0 ? '' : _rupiahFmt.format(maxNominal.toInt());
           if (tcode == '1000') {
-            limitSetorTunaiCtrl.text = formatted;
-            limitMinSetorTunaiCtrl.text = minFormatted;
+            limitMinSetorTunaiCtrl.text = minFmt;
+            limitSetorTunaiCtrl.text    = limFmt;
+            limitMaxSetorTunaiCtrl.text = maxFmt;
           }
           if (tcode == '1100') {
-            limitTarikTunaiCtrl.text = formatted;
-            limitMinTarikTunaiCtrl.text = minFormatted;
+            limitMinTarikTunaiCtrl.text = minFmt;
+            limitTarikTunaiCtrl.text    = limFmt;
+            limitMaxTarikTunaiCtrl.text = maxFmt;
           }
           if (tcode == '2300') {
-            limitPindahBukuCtrl.text = formatted;
-            limitMinPindahBukuCtrl.text = minFormatted;
+            limitMinPindahBukuCtrl.text = minFmt;
+            limitPindahBukuCtrl.text    = limFmt;
+            limitMaxPindahBukuCtrl.text = maxFmt;
           }
         }
 
         // Simpan snapshot SETELAH controller keisi nilai dari server, supaya
         // popup konfirmasi & deteksi perubahan bisa bandingin dengan nilai asli,
         // bukan hardcode '-' kayak sebelumnya.
-        _originalMinSetorTunai = limitMinSetorTunaiCtrl.text;
-        _originalLimitSetorTunai = limitSetorTunaiCtrl.text;
-        _originalMinTarikTunai = limitMinTarikTunaiCtrl.text;
-        _originalLimitTarikTunai = limitTarikTunaiCtrl.text;
-        _originalMinPindahBuku = limitMinPindahBukuCtrl.text;
-        _originalLimitPindahBuku = limitPindahBukuCtrl.text;
+        _originalMinSetorTunai    = limitMinSetorTunaiCtrl.text;
+        _originalLimitSetorTunai  = limitSetorTunaiCtrl.text;
+        _originalMaxSetorTunai    = limitMaxSetorTunaiCtrl.text;
+        _originalMinTarikTunai    = limitMinTarikTunaiCtrl.text;
+        _originalLimitTarikTunai  = limitTarikTunaiCtrl.text;
+        _originalMaxTarikTunai    = limitMaxTarikTunaiCtrl.text;
+        _originalMinPindahBuku    = limitMinPindahBukuCtrl.text;
+        _originalLimitPindahBuku  = limitPindahBukuCtrl.text;
+        _originalMaxPindahBuku    = limitMaxPindahBukuCtrl.text;
 
         notifyListeners();
       }
@@ -1545,12 +1626,15 @@ class DataTellerNotifier extends ChangeNotifier {
     // Limit transaksi: sekarang dibandingkan sama snapshot asli, bukan hardcode '-'.
     // Jadi kalau cuma limit yang diubah, ini bakal kedeteksi sebagai perubahan,
     // dan kalau gak ada yang berubah, gak dianggap perubahan juga.
-    final limitSetor = limitSetorTunaiCtrl.text.trim();
-    final limitTarik = limitTarikTunaiCtrl.text.trim();
+    final minSetor    = limitMinSetorTunaiCtrl.text.trim();
+    final limitSetor  = limitSetorTunaiCtrl.text.trim();
+    final maxSetor    = limitMaxSetorTunaiCtrl.text.trim();
+    final minTarik    = limitMinTarikTunaiCtrl.text.trim();
+    final limitTarik  = limitTarikTunaiCtrl.text.trim();
+    final maxTarik    = limitMaxTarikTunaiCtrl.text.trim();
+    final minPindah   = limitMinPindahBukuCtrl.text.trim();
     final limitPindah = limitPindahBukuCtrl.text.trim();
-    final minSetor = limitMinSetorTunaiCtrl.text.trim();
-    final minTarik = limitMinTarikTunaiCtrl.text.trim();
-    final minPindah = limitMinPindahBukuCtrl.text.trim();
+    final maxPindah   = limitMaxPindahBukuCtrl.text.trim();
 
     void addLimitChange(String label, String oldVal, String newVal) {
       final oldStr = oldVal.isEmpty ? '0' : oldVal;
@@ -1560,12 +1644,15 @@ class DataTellerNotifier extends ChangeNotifier {
       }
     }
 
-    addLimitChange('Min Setor Tunai', _originalMinSetorTunai, minSetor);
-    addLimitChange('Limit Setor Tunai', _originalLimitSetorTunai, limitSetor);
-    addLimitChange('Min Tarik Tunai', _originalMinTarikTunai, minTarik);
-    addLimitChange('Limit Tarik Tunai', _originalLimitTarikTunai, limitTarik);
-    addLimitChange('Min Pindah Buku', _originalMinPindahBuku, minPindah);
-    addLimitChange('Limit Pindah Buku', _originalLimitPindahBuku, limitPindah);
+    addLimitChange('Min Setor Tunai',     _originalMinSetorTunai,   minSetor);
+    addLimitChange('Pending Setor Tunai', _originalLimitSetorTunai, limitSetor);
+    addLimitChange('Maks Setor Tunai',    _originalMaxSetorTunai,   maxSetor);
+    addLimitChange('Min Tarik Tunai',     _originalMinTarikTunai,   minTarik);
+    addLimitChange('Pending Tarik Tunai', _originalLimitTarikTunai, limitTarik);
+    addLimitChange('Maks Tarik Tunai',    _originalMaxTarikTunai,   maxTarik);
+    addLimitChange('Min Pindah Buku',     _originalMinPindahBuku,   minPindah);
+    addLimitChange('Pending Pindah Buku', _originalLimitPindahBuku, limitPindah);
+    addLimitChange('Maks Pindah Buku',    _originalMaxPindahBuku,   maxPindah);
 
     return changes;
   }
@@ -2034,6 +2121,11 @@ class DataTellerNotifier extends ChangeNotifier {
     if (drawerMode == 'tambah') {
       final validationResult = validateAllFieldsManually();
       if (!(validationResult['isValid'] as bool)) return;
+      final limitUniversalError = await validateLimitUniversal();
+      if (limitUniversalError != null) {
+        _showErrorDialog(limitUniversalError);
+        return;
+      }
       final confirmed = await _showInsertConfirmDialog();
       if (!confirmed) return;
       await konfirmasiAksi();
@@ -2043,6 +2135,11 @@ class DataTellerNotifier extends ChangeNotifier {
     if (drawerMode == 'edit') {
       final validationResult = validateAllFieldsManually();
       if (!(validationResult['isValid'] as bool)) return;
+      final limitUniversalError = await validateLimitUniversal();
+      if (limitUniversalError != null) {
+        _showErrorDialog(limitUniversalError);
+        return;
+      }
       final confirmed = await showKonfirmasiDialog('');
       if (!confirmed) return;
       await konfirmasiAksi();
@@ -2315,10 +2412,13 @@ class DataTellerNotifier extends ChangeNotifier {
     batchCtrl.dispose();
     limitMinSetorTunaiCtrl.dispose();
     limitSetorTunaiCtrl.dispose();
+    limitMaxSetorTunaiCtrl.dispose();
     limitMinTarikTunaiCtrl.dispose();
     limitTarikTunaiCtrl.dispose();
+    limitMaxTarikTunaiCtrl.dispose();
     limitMinPindahBukuCtrl.dispose();
     limitPindahBukuCtrl.dispose();
+    limitMaxPindahBukuCtrl.dispose();
     searchCtrl.dispose();
     super.dispose();
   }

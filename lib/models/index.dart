@@ -5,6 +5,8 @@ export 'users_model.dart';
 export 'users_access_model.dart';
 export 'fasilitas_add_model.dart';
 export 'fasilitas_model.dart';
+export 'hari_libur_model.dart';
+export 'jam_kerja_model.dart';
 import 'package:quiver/core.dart';
 
 T? checkOptional<T>(Optional<T?>? optional, T? Function()? def) {

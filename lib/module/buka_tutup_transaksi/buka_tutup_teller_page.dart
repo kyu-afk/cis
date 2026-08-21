@@ -325,12 +325,12 @@ class _BukaTutupTellerPageState extends State<BukaTutupTellerPage> {
               GridColumn(
                 columnName: 'userId',
                 columnWidthMode: ColumnWidthMode.none,
-                width: 320,
+                width: 250,
                 label: _headerCell('User ID', Alignment.centerLeft),
               ),
               GridColumn(
                 columnName: 'kantor',
-                minimumWidth: 150,
+                width: 180,
                 label: _headerCell('Kantor', Alignment.centerLeft),
               ),
               GridColumn(

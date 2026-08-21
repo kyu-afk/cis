@@ -53,7 +53,7 @@ class LoginPage extends StatelessWidget {
                           Container(
                             width: 250,  // Lebar sidebar diperbesar dari 200 ke 250
                             decoration: const BoxDecoration(
-                              color: const Color(0xff0EA5A0), 
+                              color: colorPrimary, 
                               borderRadius: BorderRadius.only(
                                 topLeft: Radius.circular(16), 
                                 bottomLeft: Radius.circular(16)
@@ -159,7 +159,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  "ver. 1.2.8",
+                                  "ver. 1.2.11",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -168,7 +168,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "last update 29/7/26",
+                                  "last update 13/8/26",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -196,7 +196,7 @@ class LoginPage extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 28,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xff0EA5A0),
+                                        color: colorPrimary,
                                       ),
                                     ),
                                     const SizedBox(height: 12),
@@ -239,7 +239,7 @@ class LoginPage extends StatelessWidget {
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(10),
-                                          borderSide: const BorderSide(color: Color(0xff0EA5A0), width: 1.5),
+                                          borderSide: const BorderSide(color: colorPrimary, width: 1.5),
                                         ),
                                       ),
                                     ),
@@ -284,7 +284,7 @@ class LoginPage extends StatelessWidget {
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(10),
-                                          borderSide: const BorderSide(color: Color(0xff0EA5A0), width: 1.5),
+                                          borderSide: const BorderSide(color: colorPrimary, width: 1.5),
                                         ),
                                       ),
                                     ),
@@ -298,7 +298,7 @@ class LoginPage extends StatelessWidget {
                                           await value.cek();
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xff0EA5A0),
+                                          backgroundColor: colorPrimary,
                                           foregroundColor: Colors.white,
                                           elevation: 0,
                                           shape: RoundedRectangleBorder(
@@ -336,7 +336,7 @@ class LoginPage extends StatelessWidget {
                                         ImageAssets.logotambahan,
                                         height: 45,  // sesuaikan dengan ukuran logo asli
                                         errorBuilder: (context, error, stackTrace) {
-                                          return const Icon(Icons.business, size: 60, color: Color(0xff0EA5A0));
+                                          return const Icon(Icons.business, size: 60, color: colorPrimary);
                                         },
                                       ),
                                     ),

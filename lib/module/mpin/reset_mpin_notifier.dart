@@ -98,6 +98,18 @@ class ResetMpinNotifier extends ChangeNotifier {
 
     if (result['value'] == 1) {
       excludedCollectorIds.add(_collectorId);
+
+      // Reset MPIN juga harus membuka blokir kolektor (samain dengan
+      // aksi Unblokir di Data Petugas), supaya kolektor yang tadinya
+      // terkunci gara-gara salah MPIN bisa langsung login lagi.
+      await CollectorRepository.unblokirCollector(
+        id: _collectorId,
+        alasan: 'Reset MPIN',
+        userLogin: '',
+      );
+
+      if (!context.mounted) return;
+
       _showResultDialog(
         isSuccess: true,
         message: 'MPIN berhasil direset! Kolektor $_namaPetugas sekarang dapat login dengan MPIN default.',

@@ -14,4 +14,5 @@ class ImageAssets {
   static const String logout = "${root}logout.png";
   static const String report = "${root}clipboard.png";
   static const String logotambahan = "${root}Logo MTD lurus.png";
+  static const String hariLibur = "${root}hari_libur.png";
 }

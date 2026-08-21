@@ -146,8 +146,51 @@ class ModalKolektorNotifier extends ChangeNotifier {
       _snack('Nominal harus lebih dari 0', isError: true);
       return;
     }
+
+    // GUARD: kolektor gak boleh ngajuin modal baru kalau ADA modal
+    // sebelumnya yang statusnya MASIH Menunggu (PENDING) ATAU Diberikan
+    // (belum Settle) -- Settle jadi satu-satunya status yang "melepas
+    // kunci" ini. Awalnya cuma DIBERIKAN yang dicek, tapi dikonfirmasi
+    // user: PENDING juga harus ikut memblokir (kolektor bisa numpuk
+    // pengajuan Menunggu tanpa pernah diproses, itu juga harus dicegah).
+    // Dicek di sini (bukan cuma di backend) supaya user langsung dapat
+    // pesan jelas sebelum coba submit form.
+    //
+    // Query TANPA filter status (ambil SEMUA baris kolektor ini), lalu
+    // filter di sisi Flutter -- lebih hemat 1 request dibanding manggil
+    // inquiry() dua kali (sekali per status), dan lebih gampang di-maintain
+    // kalau nanti ada status lain yang perlu ikut masuk aturan pengunci ini.
     isSaving = true;
     notifyListeners();
+    try {
+      final cekStatus = await ModalKolektorRepository.inquiry(
+        petugasHp: selectedPetugasHp,
+      );
+      if (cekStatus['value'] == 1) {
+        final List semuaModal = cekStatus['data'] ?? [];
+        final belumSelesai = semuaModal.where((m) {
+          final s = (m is Map ? m['status'] : null)?.toString();
+          return s == 'PENDING' || s == 'DIBERIKAN';
+        }).toList();
+        if (belumSelesai.isNotEmpty) {
+          isSaving = false;
+          notifyListeners();
+          _snack(
+            'Kolektor ini masih punya modal berstatus Menunggu/Diberikan yang belum Settle. '
+            'Tidak bisa mengajukan modal baru sebelum modal sebelumnya settle.',
+            isError: true,
+          );
+          return;
+        }
+      }
+      // Kalau pengecekan sendiri gagal (mis. error jaringan), TETAP lanjut
+      // ke submit -- jangan sampai user gak bisa ngajuin modal sama sekali
+      // gara-gara gagal cek status, biarkan backend jadi penjaga akhir kalau
+      // suatu saat validasi ini juga diterapkan di sana.
+    } catch (_) {
+      // abaikan, lanjut submit seperti biasa
+    }
+
     try {
       // PATCH: tangkap nilai form ke variabel lokal SEBELUM closeDrawer() dipanggil,
       // karena closeDrawer() -> _resetForm() mengosongkan selectedPetugasNama/
@@ -225,7 +268,16 @@ class ModalKolektorNotifier extends ChangeNotifier {
     return fmt.format(n);
   }
 
-  String fmtStatus(String? s) => s == 'DIBERIKAN' ? 'Diberikan' : 'Menunggu';
+  String fmtStatus(String? s) {
+    switch (s) {
+      case 'SETTLE':
+        return 'Settle';
+      case 'DIBERIKAN':
+        return 'Diberikan';
+      default:
+        return 'Menunggu';
+    }
+  }
 
   // ── Cetak Struk ──────────────────────────────────────────────────────────
   Future<void> _printStruk({

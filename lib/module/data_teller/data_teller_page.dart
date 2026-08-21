@@ -770,21 +770,24 @@ class DataTellerPage extends StatelessWidget {
                       _limitTcodeRow(
                         label: 'Setor Tunai (1000)',
                         minCtrl: notifier.limitMinSetorTunaiCtrl,
-                        maxCtrl: notifier.limitSetorTunaiCtrl,
+                        pendingCtrl: notifier.limitSetorTunaiCtrl,
+                        maxCtrl: notifier.limitMaxSetorTunaiCtrl,
                         errorText: notifier.manualErrors['limitSetor'],
                       ),
                       const SizedBox(height: 12),
                       _limitTcodeRow(
                         label: 'Tarik Tunai (1100)',
                         minCtrl: notifier.limitMinTarikTunaiCtrl,
-                        maxCtrl: notifier.limitTarikTunaiCtrl,
+                        pendingCtrl: notifier.limitTarikTunaiCtrl,
+                        maxCtrl: notifier.limitMaxTarikTunaiCtrl,
                         errorText: notifier.manualErrors['limitTarik'],
                       ),
                       const SizedBox(height: 12),
                       _limitTcodeRow(
                         label: 'Pindah Buku (2300)',
                         minCtrl: notifier.limitMinPindahBukuCtrl,
-                        maxCtrl: notifier.limitPindahBukuCtrl,
+                        pendingCtrl: notifier.limitPindahBukuCtrl,
+                        maxCtrl: notifier.limitMaxPindahBukuCtrl,
                         errorText: notifier.manualErrors['limitPindah'],
                       ),
                     ],
@@ -1243,6 +1246,7 @@ class DataTellerPage extends StatelessWidget {
   Widget _limitTcodeRow({
     required String label,
     required TextEditingController minCtrl,
+    required TextEditingController pendingCtrl,
     required TextEditingController maxCtrl,
     String? errorText,
   }) {
@@ -1274,13 +1278,26 @@ class DataTellerPage extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Max (pending jika lebih)', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              const Text('Pending', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: pendingCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: formatter,
+                decoration: dec.copyWith(hintText: '0 = tanpa pending'),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Maks', style: TextStyle(fontSize: 11, color: Colors.black54)),
               const SizedBox(height: 4),
               TextFormField(
                 controller: maxCtrl,
                 keyboardType: TextInputType.number,
                 inputFormatters: formatter,
-                decoration: dec.copyWith(hintText: '0 = tanpa max', errorText: errorText),
+                decoration: dec.copyWith(hintText: '0 = tanpa maks', errorText: errorText),
               ),
             ]),
           ),

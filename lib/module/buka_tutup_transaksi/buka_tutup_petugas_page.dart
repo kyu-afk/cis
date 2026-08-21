@@ -319,18 +319,18 @@ class _BukaTutupPetugasPageState extends State<BukaTutupPetugasPage> {
               ),
               GridColumn(
                 columnName: 'nama',
-                minimumWidth: 130,
+                minimumWidth: 280,
                 label: _headerCell('Nama kolektor', Alignment.centerLeft),
               ),
               GridColumn(
                 columnName: 'noHp',
                 columnWidthMode: ColumnWidthMode.none,
-                width: 320,
+                width: 250,
                 label: _headerCell('No HP', Alignment.centerLeft),
               ),
               GridColumn(
                 columnName: 'kantor',
-                minimumWidth: 150,
+                width: 180,
                 label: _headerCell('Kantor', Alignment.centerLeft),
               ),
               GridColumn(

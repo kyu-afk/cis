@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../../network/network.dart';
 import 'login_page.dart';
 import '../menu/menu_page.dart';
+import 'hari_libur_page.dart';
+import '../../utils/hari_libur_exception.dart';
 
 class LoginNotifier extends ChangeNotifier {
   final BuildContext context;
@@ -40,9 +42,76 @@ class LoginNotifier extends ChangeNotifier {
         (users!.usersId).isNotEmpty &&
         token.isNotEmpty;
     if (isLoggedIn) {
-      _navigateToMenu();
+      await _proceedIfNotHoliday();
     }
     notifyListeners();
+  }
+
+  // ==================== CEK HARI LIBUR ====================
+  // Dipanggil sebelum masuk ke menu, baik dari login manual maupun
+  // auto-login sesi tersimpan. Kalau hari ini hari libur (nasional/cuti
+  // bersama/khusus BPR ini), sesi di-clear dan diarahkan ke HariLiburPage
+  // — bukan cuma dihalangi tampilannya doang, tapi beneran gak jadi login.
+  Future<void> _proceedIfNotHoliday() async {
+    final bprId = users?.bprId ?? '';
+    if (bprId.isEmpty) {
+      _navigateToMenu();
+      return;
+    }
+
+    // PENGECUALIAN: bpr_id tertentu (mis. 609999) tetap boleh login
+    // walaupun hari ini hari libur — skip semua pengecekan di bawah.
+    if (isHariLiburExempt(bprId)) {
+      _navigateToMenu();
+      return;
+    }
+
+    // Cek 2 sumber libur:
+    // 1. Tanggal spesifik (libur nasional / cuti bersama / libur khusus BPR)
+    // 2. Hari dalam minggu yang memang libur rutin (mis. Sabtu-Minggu),
+    //    dari setup jam kerja — jam buka/tutup-nya sendiri diabaikan.
+    final hariLibur = await AuthRepository.checkHariLibur(bprId: bprId);
+    String? keterangan = hariLibur?.keterangan;
+
+    if (keterangan == null) {
+      final jamKerjaLibur = await AuthRepository.checkJamKerjaLibur(bprId: bprId);
+      if (jamKerjaLibur != null) {
+        keterangan = 'Hari ${jamKerjaLibur.hariNama}';
+      }
+    }
+
+    if (keterangan != null) {
+      // PATCH: login-nya sendiri sebenarnya BERHASIL (userid/password benar),
+      // cuma kita yang menolak masuk karena hari libur — jadi status login
+      // di server (stslogin) kemungkinan sudah keburu keubah jadi 'Y'.
+      // Panggil logout ke server di sini juga, supaya statusnya balik ke 'N'
+      // dan akunnya gak nyangkut "masih login" padahal user gak jadi masuk.
+      if (users != null) {
+        try {
+          await AuthRepository.logOut(
+            NetworkURL.logout(),
+            users!.bprId,
+            users!.usersId,
+            users!.usersId,
+          );
+        } catch (e) {
+          // Diamkan — walau logout ke server gagal, sesi lokal tetap harus
+          // dibersihkan di bawah supaya user gak nyangkut di sisi Flutter-nya.
+        }
+      }
+
+      await Pref().hapus();
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => HariLiburPage(keterangan: keterangan)),
+          (route) => false,
+        );
+      }
+      return;
+    }
+
+    _navigateToMenu();
   }
 
   Future<void> cek() async {
@@ -76,7 +145,7 @@ class LoginNotifier extends ChangeNotifier {
           );
 
           final fasilitasCount = (value['fasilitas'] as List?)?.length ?? 0;
-          _navigateToMenu();
+          await _proceedIfNotHoliday();
         } catch (e) {
           if (context.mounted) {
             CustomDialog.messageResponse(

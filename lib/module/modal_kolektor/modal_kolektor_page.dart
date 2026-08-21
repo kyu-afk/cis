@@ -94,20 +94,46 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
         itemCount: n.items.length,
         itemBuilder: (_, i) {
           final item = n.items[i];
-          final isDiberikan = item['status'] == 'DIBERIKAN';
+          final status = item['status']?.toString() ?? 'PENDING';
+          final isDiberikan = status == 'DIBERIKAN';
+          final isSettle = status == 'SETTLE';
+          // Hapus cuma masuk akal buat modal yang MASIH Pending -- begitu
+          // sudah Diberikan atau Settle, datanya final/gak boleh dihapus
+          // sembarangan (Settle bahkan lebih final lagi, itu penanda
+          // transaksinya udah benar-benar tuntas).
+          final showAksi = !isDiberikan && !isSettle;
+          final Color badgeBg;
+          final Color badgeText;
+          final Color accentColor;
+          final IconData leadingIcon;
+          if (isSettle) {
+            badgeBg = Colors.blue.shade100;
+            badgeText = Colors.blue.shade800;
+            accentColor = Colors.blue;
+            leadingIcon = Icons.verified;
+          } else if (isDiberikan) {
+            badgeBg = Colors.green.shade100;
+            badgeText = Colors.green.shade800;
+            accentColor = Colors.green;
+            leadingIcon = Icons.check_circle;
+          } else {
+            badgeBg = Colors.amber.shade100;
+            badgeText = Colors.amber.shade800;
+            accentColor = colorPrimary;
+            leadingIcon = Icons.account_balance_wallet;
+          }
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isDiberikan ? Colors.green.shade200 : const Color(0xffDCE3DF)),
+              border: Border.all(color: (isDiberikan || isSettle) ? accentColor.withValues(alpha: 0.4) : const Color(0xffDCE3DF)),
             ),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: CircleAvatar(
-                backgroundColor: isDiberikan ? Colors.green.shade50 : colorPrimary.withValues(alpha: 0.1),
-                child: Icon(isDiberikan ? Icons.check_circle : Icons.account_balance_wallet,
-                    color: isDiberikan ? Colors.green : colorPrimary, size: 20),
+                backgroundColor: (isDiberikan || isSettle) ? accentColor.withValues(alpha: 0.1) : colorPrimary.withValues(alpha: 0.1),
+                child: Icon(leadingIcon, color: accentColor, size: 20),
               ),
               title: Text(item['petugas_nama'] ?? '-',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -127,14 +153,14 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: isDiberikan ? Colors.green.shade100 : Colors.amber.shade100,
+                      color: badgeBg,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(n.fmtStatus(item['status']),
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                            color: isDiberikan ? Colors.green.shade800 : Colors.amber.shade800)),
+                            color: badgeText)),
                   ),
-                  if (!isDiberikan) ...[
+                  if (showAksi) ...[
                     const SizedBox(height: 4),
                     GestureDetector(
                       onTap: () => n.openActionDrawer(item),
@@ -272,7 +298,10 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
 
   Widget _buildActionDrawer(ModalKolektorNotifier n) {
     final item = n.selectedItem!;
-    final isDiberikan = item['status'] == 'DIBERIKAN';
+    final status = item['status']?.toString() ?? 'PENDING';
+    final isDiberikan = status == 'DIBERIKAN';
+    final isSettle = status == 'SETTLE';
+    final showHapus = !isDiberikan && !isSettle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -326,7 +355,7 @@ class _ModalKolektorPageState extends State<ModalKolektorPage> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              if (!isDiberikan) ...[
+              if (showHapus) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: n.hapus,

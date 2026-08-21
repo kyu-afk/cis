@@ -11,6 +11,7 @@ import '../../network/network.dart';
 import '../../pref/pref.dart';
 import '../../utils/colors.dart';
 import '../../utils/user_level.dart';
+import '../../utils/limit_universal_validator.dart';
 import 'data_petugas_stsrec.dart';
 import 'package:flutter/foundation.dart';
 
@@ -1240,6 +1241,54 @@ class DataPetugasNotifier extends ChangeNotifier {
     return allValid;
   }
 
+  // Validasi silang ke Limit Transaksi universal (lihat
+  // utils/limit_universal_validator.dart). ASYNC karena butuh fetch batas
+  // universal dari server -- dipanggil terpisah dari
+  // validateAllFieldsManually() (yang sinkron) di executeAction(), SEBELUM
+  // validasi manual itu jalan. Return null kalau valid / gagal fetch batas
+  // universal (jangan salah tolak isian valid gara-gara offline), atau
+  // pesan gabungan semua pelanggaran.
+  //
+  // Beda dari Teller (field statis 1:1), di sini iterasi lewat
+  // tcodeAksesList (dinamis dari master data server) -- cuma item yang
+  // `checked == true` yang divalidasi, konsisten dengan
+  // validateAllFieldsManually di atas. Kategori dicocokkan berdasarkan
+  // `keterangan` (label tampilan, mis. "TARIK TUNAI", "TRANSFER OUT")
+  // MENGANDUNG kata kunci kategori universal -- lihat _matchKategori di
+  // limit_universal_validator.dart. Item yang keterangan-nya gak mengandung
+  // kata kunci kategori manapun (mis. "PINDAH BUKU", "QRIS MTD") sengaja
+  // TIDAK divalidasi, gak ada padanan limit universalnya.
+  Future<String?> validateLimitUniversal() async {
+    final ranges = await LimitUniversalValidator.fetchRanges();
+    if (ranges == null) return null;
+
+    double? _parse(String text) {
+      final raw = text.replaceAll(RegExp(r'[^\d]'), '').trim();
+      if (raw.isEmpty) return null;
+      return double.tryParse(raw);
+    }
+
+    final errors = <String>[];
+    for (final item in tcodeAksesList) {
+      if (item['checked'] != true) continue;
+      final label = (item['keterangan'] ?? '').toString();
+      if (label.isEmpty) continue;
+      final minCtrl = item['minCtrl'] as TextEditingController;
+      final maxCtrl = item['maxCtrl'] as TextEditingController;
+
+      final err = LimitUniversalValidator.validateField(
+        ranges: ranges,
+        label: label,
+        minVal: _parse(minCtrl.text),
+        maxVal: _parse(maxCtrl.text),
+      );
+      if (err != null) errors.add(err);
+    }
+
+    if (errors.isEmpty) return null;
+    return errors.join('\n');
+  }
+
   bool _validateLimitFields(String prefix, TextEditingController minCtrl, TextEditingController maxCtrl, TextEditingController pendingCtrl, Map<String, String> errors) {
     bool valid = true;
     final minStr = minCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
@@ -2077,6 +2126,11 @@ class DataPetugasNotifier extends ChangeNotifier {
   Future<void> executeAction() async {
     if (drawerMode == 'tambah') {
       if (!validateAllFieldsManually()) return;
+      final limitUniversalError = await validateLimitUniversal();
+      if (limitUniversalError != null) {
+        _showErrorDialog(limitUniversalError);
+        return;
+      }
       final confirmed = await _showInsertConfirmDialog();
       if (!confirmed) return;
       await _konfirmasiAksi();
@@ -2085,6 +2139,11 @@ class DataPetugasNotifier extends ChangeNotifier {
     
     if (drawerMode == 'edit') {
       if (!validateAllFieldsManually()) return;
+      final limitUniversalError = await validateLimitUniversal();
+      if (limitUniversalError != null) {
+        _showErrorDialog(limitUniversalError);
+        return;
+      }
       final confirmed = await showKonfirmasiDialog('');
       if (!confirmed) return;
       await _konfirmasiAksi();

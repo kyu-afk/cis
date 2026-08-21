@@ -35,6 +35,12 @@ enum _FormMode { tambah, ubah }
 
 enum _TambahStage { pilihNasabah, signature, selfie, done }
 
+// Status kelengkapan foto per-CIF (gabungan IBPR + Database Foto CIS).
+// `loading` dipakai sebagai penanda sementara di cache SEBELUM request
+// selesai — supaya baris yang sama tidak di-fetch dobel kalau user
+// pindah-pindah halaman dengan cepat sebelum request pertama kelar.
+enum _FotoLengkapStatus { loading, lengkap, tidakLengkap }
+
 // ==================== MODEL (account_search) ====================
 class _DummyNasabahFoto {
   final String nama;
@@ -265,6 +271,95 @@ class _KelolaFotoNotifier extends ChangeNotifier {
 
   List<_DummyNasabahFoto> _filtered = [];
   List<_DummyNasabahFoto> get filtered => _filtered;
+
+  // ==================== STATUS KELENGKAPAN FOTO (lazy per-halaman) ====================
+  // Status "Lengkap"/"Tidak Lengkap" butuh gabungan dari 3 sumber:
+  //  1. IBPR (account_search)      -> fhoto1 (KTP) + fhoto2 (Selfie), SUDAH
+  //     ada langsung di tiap baris _DummyNasabahFoto, tidak perlu request.
+  //  2. Database Foto (CIS, lewat nasabahPhotoBridge/action=inquiry)
+  //     -> foto_ttd_path + foto_ktp_path dari CIS. Endpoint ini CUMA bisa
+  //     query 1 no_cif per request (dikonfirmasi, tidak ada mode batch).
+  // Karena sumber #2 gak ada versi batch-nya, dan datanya bisa 500+ baris,
+  // status foto TIDAK di-resolve untuk semua baris sekaligus saat load awal
+  // (itu yang bikin ratusan request nembak barengan). Sebagai gantinya:
+  // status di-resolve LAZY, cuma untuk baris yang SEDANG TAMPIL di halaman
+  // aktif tabel (dipicu oleh AppDataGrid.onPageChanged) -- lihat
+  // _resolveFotoStatusForVisibleRows di bawah.
+  //
+  // Cache per-CIF: begitu status suatu CIF sudah pernah diresolve, gak akan
+  // di-fetch ulang lagi walau baris itu tampil lagi di halaman lain/setelah
+  // pindah-pindah halaman berkali-kali.
+  final Map<String, _FotoLengkapStatus> _fotoStatusCache = {};
+  Map<String, _FotoLengkapStatus> get fotoStatusCache => _fotoStatusCache;
+
+  Future<void> resolveFotoStatusForVisibleRows(List<Map<String, dynamic>> visibleRows) async {
+    // Ambil CIF dari baris yang tampil, yang belum ada di cache sama sekali
+    // (belum pernah diresolve ATAU masih dalam proses resolve -- ditandai
+    // _FotoLengkapStatus.loading yang di-set SEBELUM request jalan, supaya
+    // pindah halaman bolak-balik cepat tidak memicu request dobel untuk CIF
+    // yang sama).
+    final targets = <String>[];
+    for (final row in visibleRows) {
+      final cif = (row['cif'] as String?) ?? '';
+      if (cif.isEmpty || cif == '-') continue;
+      if (_fotoStatusCache.containsKey(cif)) continue;
+      targets.add(cif);
+      _fotoStatusCache[cif] = _FotoLengkapStatus.loading;
+    }
+    if (targets.isEmpty) return;
+    notifyListeners(); // tampilkan "Memuat..." dulu untuk baris yang ditarget
+
+    // Sequential dengan batch kecil (bukan Future.wait semua sekaligus) —
+    // konsisten dengan _resolveCifFromNoRek: satu halaman tabel isinya
+    // cuma sekitar pageSize baris (7-9), jadi batch kecil di sini murni
+    // jaga-jaga, bukan optimisasi krusial seperti di _resolveCifFromNoRek
+    // yang dulu bisa kena ratusan baris sekaligus.
+    const batchSize = 5;
+    for (var i = 0; i < targets.length; i += batchSize) {
+      final batch = targets.skip(i).take(batchSize);
+      await Future.wait(batch.map((cif) async {
+        // Sisi IBPR: fhoto1 (KTP) + fhoto2 (Selfie) SUDAH ada di objek
+        // _DummyNasabahFoto sejak account_search, tidak perlu request lagi.
+        // Cari objeknya dari _list (bukan _filtered -- CIF stabil walau
+        // keyword pencarian berubah, tapi index baris di tabel tidak).
+        _DummyNasabahFoto? matched;
+        for (final d in _list) {
+          if (d.cif == cif) {
+            matched = d;
+            break;
+          }
+        }
+        final ibprLengkap = matched != null &&
+            matched.fhoto1.trim().isNotEmpty &&
+            matched.fhoto2.trim().isNotEmpty;
+
+        try {
+          final result = await KelolaFotoRepository.inquiryNasabahPhoto(noCif: cif);
+          bool cisLengkap = false;
+          if (result['value'] == 1 && result['data'] != null) {
+            final data = Map<String, dynamic>.from(result['data'] as Map);
+            final ttdPath = (data['foto_ttd_path'] ?? '').toString().trim();
+            final ktpPath = (data['foto_ktp_path'] ?? '').toString().trim();
+            cisLengkap = ttdPath.isNotEmpty && ktpPath.isNotEmpty;
+          }
+          // Lengkap HANYA kalau dua-duanya lengkap: sisi IBPR (KTP+Selfie)
+          // DAN sisi CIS/Database Foto (TTD+KTP). Kalau salah satu sumber
+          // gak punya baris sama sekali atau cuma sebagian foto, dianggap
+          // Tidak Lengkap.
+          _fotoStatusCache[cif] = (ibprLengkap && cisLengkap)
+              ? _FotoLengkapStatus.lengkap
+              : _FotoLengkapStatus.tidakLengkap;
+        } catch (e) {
+          if (kDebugMode) print('ERROR resolveFotoStatus ($cif): $e');
+          // Gagal cek -> jangan diklaim status apa pun, biar dicoba lagi
+          // lain kali baris ini kelihatan (hapus dari cache, bukan disimpan
+          // sebagai status pasti).
+          _fotoStatusCache.remove(cif);
+        }
+      }));
+      notifyListeners();
+    }
+  }
 
   bool isLoading = false;
   String? errorMessage;
@@ -1125,6 +1220,7 @@ class _KelolaFotoListView extends StatelessWidget {
       pageSize: 7,
       columns: _buildColumns(),
       rows: _buildRows(notifier),
+      onPageChanged: notifier.resolveFotoStatusForVisibleRows,
       onActionTap: (row) {
         final d = notifier.filtered[row['__index__'] as int];
         notifier.openUbah(d);
@@ -1150,12 +1246,57 @@ class _KelolaFotoListView extends StatelessWidget {
     );
   }
 
+  Widget _statusFotoBadge(_FotoLengkapStatus? status) {
+    late final String label;
+    late final Color color;
+    switch (status) {
+      case _FotoLengkapStatus.lengkap:
+        label = 'Lengkap';
+        color = Colors.green;
+        break;
+      case _FotoLengkapStatus.tidakLengkap:
+        label = 'Tidak Lengkap';
+        color = Colors.red;
+        break;
+      case _FotoLengkapStatus.loading:
+        label = 'Memuat...';
+        color = Colors.grey;
+        break;
+      case null:
+        // Belum sempat di-resolve (baris belum pernah masuk halaman aktif) —
+        // tampil netral, bukan diklaim salah satu status.
+        label = '-';
+        color = Colors.grey;
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   List<AppGridColumn> _buildColumns() => [
         const AppGridColumn('nama', 'Nama', width: 250),
-        const AppGridColumn('cif', 'No CIF', width: 220),
-        const AppGridColumn('noIdentitas', 'No Identitas', width: 200),
-        const AppGridColumn('noHp', 'No HP', width: 200),
-        const AppGridColumn('tglLahir', 'Tgl Lahir', width: 200),
+        const AppGridColumn('cif', 'No CIF', width: 181),
+        const AppGridColumn('noIdentitas', 'No Identitas', width: 163),
+        const AppGridColumn('noHp', 'No HP', width: 163),
+        const AppGridColumn('tglLahir', 'Tgl Lahir', width: 163),
+        AppGridColumn(
+          'statusFoto',
+          'Status Foto',
+          width: 150,
+          align: Alignment.center,
+          headerAlign: Alignment.center,
+          cellBuilder: (value) => Center(child: _statusFotoBadge(value as _FotoLengkapStatus?)),
+        ),
         AppGridColumn(
           'aksi',
           'Aksi',
@@ -1184,13 +1325,15 @@ class _KelolaFotoListView extends StatelessWidget {
     return notifier.filtered.asMap().entries.map((e) {
       final i = e.key;
       final d = e.value;
+      final cif = d.cif.isNotEmpty ? d.cif : '-';
       return {
         '__index__': i,
         'nama': d.nama,
-        'cif': d.cif.isNotEmpty ? d.cif : '-',
+        'cif': cif,
         'noIdentitas': d.noIdentitas.isNotEmpty ? d.noIdentitas : '-',
         'noHp': d.noHp.isNotEmpty ? d.noHp : '-',
         'tglLahir': d.tglLahir,
+        'statusFoto': notifier.fotoStatusCache[cif],
         'aksi': '',
       };
     }).toList();

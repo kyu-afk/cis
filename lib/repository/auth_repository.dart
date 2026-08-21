@@ -16,6 +16,116 @@ class AuthRepository {
   /// Dio dengan Bearer token untuk endpoint protected.
   static Future<Dio> _dioAuth() => ApiClient.buildProtected();
 
+  // ==================== CEK HARI LIBUR ====================
+  // POST https://api-dev-cms.medtrans.id/setup_hari_libur
+  // Body: {action: "list", tahun: <tahun berjalan>}
+  //
+  // 3 jenis libur:
+  // - libur_nasional & cuti_bersama: berlaku untuk SEMUA BPR
+  // - libur_khusus: cuma berlaku untuk BPR yang ada di field bpr_ids
+  //
+  // Return: entri hari libur yang berlaku HARI INI untuk bprId ini, atau
+  // null kalau bukan hari libur. Kalau API-nya gagal/error, dianggap BUKAN
+  // hari libur (fail-open) — supaya orang gak ke-block login gara-gara
+  // API cek libur lagi down, bukan karena beneran hari libur.
+  static Future<HariLiburModel?> checkHariLibur({
+    required String bprId,
+    DateTime? date,
+  }) async {
+    try {
+      final checkDate = date ?? DateTime.now();
+      final dio = Dio();
+      dio.options.headers['Content-Type'] = 'application/json';
+
+      final body = {'action': 'list', 'tahun': checkDate.year};
+
+      if (kDebugMode) {
+        print('📤 CEK HARI LIBUR URL: ${NetworkURL.setupHariLibur()}');
+        print('📤 CEK HARI LIBUR BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.setupHariLibur(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+
+      if (kDebugMode) print('📥 CEK HARI LIBUR RESPONSE: $decoded');
+
+      final code = (decoded['code'] ?? '').toString();
+      if (code != '000') return null;
+
+      final List<dynamic> raw = decoded['data'] ?? [];
+      final list = raw.map((e) => HariLiburModel.fromJson(Map<String, dynamic>.from(e))).toList();
+
+      final todayStr =
+          '${checkDate.year.toString().padLeft(4, '0')}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}';
+
+      for (final h in list) {
+        if (!h.isActive) continue;
+        if (h.tanggal != todayStr) continue;
+        if (h.appliesToBpr(bprId)) return h;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('❌ ERROR CEK HARI LIBUR: $e');
+      return null;
+    }
+  }
+
+  // ==================== CEK JAM KERJA (hari libur mingguan) ====================
+  // POST https://api-dev-cms.medtrans.id/setup_jam_kerja
+  // Body: {action: "list", bpr_id: "..."}
+  //
+  // Ini beda dari checkHariLibur() di atas — ini per HARI DALAM MINGGU
+  // (Senin..Minggu berulang tiap minggu), bukan tanggal spesifik. Field
+  // 'hari' di response persis sama konvensinya dengan DateTime.weekday di
+  // Dart (1=Senin..7=Minggu), jadi tinggal dicocokkan langsung.
+  //
+  // jam_buka/jam_tutup SENGAJA diabaikan — cuma is_libur yang dipakai,
+  // karena kalau hari itu libur, dari awal hari memang gak boleh dipakai
+  // sama sekali (beberapa karyawan masih ada yang lembur di luar jam kerja
+  // normal, jadi jam buka/tutup gak relevan buat validasi login).
+  //
+  // Return: entri hari itu kalau is_libur true, atau null kalau bukan hari
+  // libur mingguan. Fail-open juga (sama seperti checkHariLibur) kalau
+  // API-nya gagal/error.
+  static Future<JamKerjaModel?> checkJamKerjaLibur({
+    required String bprId,
+    DateTime? date,
+  }) async {
+    try {
+      final checkDate = date ?? DateTime.now();
+      final dio = Dio();
+      dio.options.headers['Content-Type'] = 'application/json';
+
+      final body = {'action': 'list', 'bpr_id': bprId};
+
+      if (kDebugMode) {
+        print('📤 CEK JAM KERJA URL: ${NetworkURL.setupJamKerja()}');
+        print('📤 CEK JAM KERJA BODY: ${jsonEncode(body)}');
+      }
+
+      final response = await dio.post(NetworkURL.setupJamKerja(), data: jsonEncode(body));
+      final decoded = _safeDecode(response.data);
+
+      if (kDebugMode) print('📥 CEK JAM KERJA RESPONSE: $decoded');
+
+      final code = (decoded['code'] ?? '').toString();
+      if (code != '000') return null;
+
+      final List<dynamic> raw = decoded['data'] ?? [];
+      final list = raw.map((e) => JamKerjaModel.fromJson(Map<String, dynamic>.from(e))).toList();
+
+      // DateTime.weekday: 1=Senin ... 7=Minggu — sama persis field 'hari'.
+      final todayWeekday = checkDate.weekday;
+      for (final j in list) {
+        if (j.hari == todayWeekday && j.isLibur) return j;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('❌ ERROR CEK JAM KERJA: $e');
+      return null;
+    }
+  }
+
   static dynamic _safeDecode(dynamic data) {
     if (data is String) {
       return jsonDecode(data);

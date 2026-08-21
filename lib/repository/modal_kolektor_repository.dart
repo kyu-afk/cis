@@ -31,7 +31,7 @@ class ModalKolektorRepository {
     return 'Terjadi kesalahan, silakan coba lagi.';
   }
 
-  static Future<Map<String, dynamic>> inquiry({String? petugasHp, String? status}) async {
+  static Future<Map<String, dynamic>> inquiry({String? petugasHp, String? status, int? sinceDays}) async {
     try {
       final dio = await _dio();
       final session = await Pref().getUsers();
@@ -39,6 +39,13 @@ class ModalKolektorRepository {
         'bpr_id': session.bprId,
         if ((petugasHp ?? '').isNotEmpty) 'petugas_hp': petugasHp,
         if ((status ?? '').isNotEmpty) 'status': status,
+        // Batasi data ke N hari terakhir (default backend 7 hari kalau gak
+        // dikirim) -- sesuai kesepakatan performa: data lama TETAP AMAN
+        // tersimpan di database, cuma gak ditampilkan/di-query di sini.
+        // Backend juga pakai jendela waktu yang sama buat proses auto-settle
+        // (cocokkan status DIBERIKAN -> SETTLE), jadi filter ini bukan cuma
+        // soal tampilan.
+        'since_days': sinceDays ?? 7,
         'page': 1,
         'size': 200,
       };

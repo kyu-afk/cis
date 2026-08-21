@@ -114,6 +114,8 @@ class NetworkURL {
 
   // ---------- TCode ----------
   static String listTcode() => "$url_go/tcode";
+  static String setupHariLibur() => "$url_go/setup_hari_libur";
+  static String setupJamKerja() => "$url_go/setup_jam_kerja";
 
 
   // ---------- Transaksi Petugas  ----------

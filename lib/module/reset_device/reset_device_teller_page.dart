@@ -7,14 +7,17 @@
 // bisa mengosongkannya.
 
 import 'package:flutter/material.dart';
+import '../../models/index.dart';
 import '../../pref/pref.dart';
 import '../../repository/teller_repository.dart';
 import '../../utils/colors.dart';
+import '../../utils/user_level.dart';
 
 class TellerDeviceInfo {
   final String userid;
   final String nama;
   final String kdKantor;
+  final String? namaKantor;
   final String? loginDeviceId;
   final String? loginDeviceName;
   final String? lastActivityAt;
@@ -24,6 +27,7 @@ class TellerDeviceInfo {
     required this.userid,
     required this.nama,
     required this.kdKantor,
+    this.namaKantor,
     this.loginDeviceId,
     this.loginDeviceName,
     this.lastActivityAt,
@@ -42,6 +46,7 @@ class TellerDeviceInfo {
       userid: (json['userid'] ?? '').toString(),
       nama: (json['nama'] ?? '-').toString(),
       kdKantor: (json['kd_kantor'] ?? '').toString(),
+      namaKantor: json['nama_kantor']?.toString(),
       loginDeviceId: json['login_device_id']?.toString(),
       loginDeviceName: json['login_device_name']?.toString(),
       lastActivityAt: json['last_activity_at']?.toString(),
@@ -58,6 +63,7 @@ class ResetDeviceTellerNotifier extends ChangeNotifier {
   TellerDeviceInfo? tellerData;
 
   String? _bprId;
+  UsersModel? _sessionUser;
 
   ResetDeviceTellerNotifier() {
     _loadUserData();
@@ -65,6 +71,7 @@ class ResetDeviceTellerNotifier extends ChangeNotifier {
 
   Future<void> _loadUserData() async {
     final users = await Pref().getUsers();
+    _sessionUser = users;
     _bprId = users.bprId;
   }
 
@@ -96,18 +103,31 @@ class ResetDeviceTellerNotifier extends ChangeNotifier {
 
       if (result['value'] == 1) {
         final List<dynamic> data = result['data'] ?? [];
-        final list = data.map((e) => TellerDeviceInfo.fromJson(Map<String, dynamic>.from(e))).toList();
+        var list = data.map((e) => TellerDeviceInfo.fromJson(Map<String, dynamic>.from(e))).toList();
 
-        // Cocokkan persis dengan userid yang diketik dulu, kalau gak ada
-        // exact match ambil hasil pertama dari pencarian nama.
+        // PATCH: filter kantor — cuma boleh nemuin teller di kantor sendiri
+        // (kecuali session kode kantor "000" yang lihat semua). Sebelumnya
+        // filter ini kelewat waktu halaman ini di-desain ulang jadi search-based.
+        list = UserLevelHelper.applyKantorFilter(
+          list: list,
+          users: _sessionUser,
+          getKdKantor: (t) => t.kdKantor,
+        );
+
+        // PATCH: pencocokan sekarang diprioritaskan, bukan asal ambil hasil
+        // pertama (list.first) — sebelumnya itu bisa nunjukin teller yang
+        // sama sekali gak nyambung sama kata kunci yang diketik, kalau
+        // exact-match gagal.
+        // 1) userid sama persis
+        // 2) userid MENGANDUNG keyword
+        // 3) nama MENGANDUNG keyword
+        final kw = keyword.toLowerCase();
         TellerDeviceInfo? match;
         for (final t in list) {
-          if (t.userid.toLowerCase() == keyword.toLowerCase()) {
-            match = t;
-            break;
-          }
+          if (t.userid.toLowerCase() == kw) { match = t; break; }
         }
-        match ??= list.isNotEmpty ? list.first : null;
+        match ??= list.where((t) => t.userid.toLowerCase().contains(kw)).firstOrNull;
+        match ??= list.where((t) => t.nama.toLowerCase().contains(kw)).firstOrNull;
 
         if (match == null) {
           errorMessage = "Teller dengan nama/User ID '$keyword' tidak ditemukan";
@@ -482,7 +502,7 @@ class _ResetDeviceTellerPageState extends State<ResetDeviceTellerPage> {
                                   children: [
                                     _infoRow('User ID', _notifier.tellerData!.userid),
                                     _infoRow('Nama', _notifier.tellerData!.nama),
-                                    _infoRow('Kode Kantor', _notifier.tellerData!.kdKantor),
+                                    _infoRow('Kantor', _notifier.tellerData!.namaKantor ?? _notifier.tellerData!.kdKantor),
                                     _infoRow('Device Name', _notifier.tellerData!.loginDeviceName ?? ''),
                                     _infoRow('Terakhir Login', _notifier.tellerData!.lastActivityAt ?? ''),
                                     const SizedBox(height: 12),
@@ -538,7 +558,7 @@ class _ResetDeviceTellerPageState extends State<ResetDeviceTellerPage> {
                                           ),
                                           const SizedBox(width: 12),
                                           Text(
-                                            _notifier.tellerData!.isLoggedIn ? 'Status: Sudah pernah Login' : 'Status: Belum pernah Login',
+                                            _notifier.tellerData!.isLoggedIn ? 'Status: Sedang Login' : 'Status: Belum Login',
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,

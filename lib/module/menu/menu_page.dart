@@ -99,12 +99,12 @@ class MenuPage extends StatelessWidget {
           _MenuItem('Teller', Icons.account_balance, page: 71,
               menu: 'BUKA & TUTUP TRANSAKSI', submenu: 'TELLER'),
         ]),
-        const _MenuItem('RESET DEVICE', Icons.phonelink_erase,
-            menu: 'RESET DEVICE', children: [
+        const _MenuItem('GANTI DEVICE', Icons.phonelink_erase,
+            menu: 'GANTI DEVICE', children: [
           _MenuItem('Teller', Icons.account_balance, page: 90,
-              menu: 'RESET DEVICE', submenu: 'TELLER'),
+              menu: 'GANTI DEVICE', submenu: 'TELLER'),
           _MenuItem('Kolektor', Icons.person_search, page: 91,
-              menu: 'RESET DEVICE', submenu: 'PETUGAS'),
+              menu: 'GANTI DEVICE', submenu: 'KOLEKTOR'),
         ]),
         const _MenuItem('MODAL KOLEKTOR', Icons.account_balance_wallet,
             page: 50, menu: 'MODAL KOLEKTOR', submenu: 'MODAL KOLEKTOR'),

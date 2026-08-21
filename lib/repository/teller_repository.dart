@@ -709,10 +709,13 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     String? backendId,
     required double minSetorTunai,
     required double limitSetorTunai,
+    required double maxSetorTunai,
     required double minTarikTunai,
     required double limitTarikTunai,
+    required double maxTarikTunai,
     required double minPindahBuku,
     required double limitPindahBuku,
+    required double maxPindahBuku,
     String? bprId,
   }) async {
     try {
@@ -724,9 +727,9 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         'userlogin': session.usersId,
         'term':      'WEB',
         'limits': [
-          {'tcode': '1000', 'min_nominal': minSetorTunai,  'limit_nominal': limitSetorTunai},
-          {'tcode': '1100', 'min_nominal': minTarikTunai,  'limit_nominal': limitTarikTunai},
-          {'tcode': '2300', 'min_nominal': minPindahBuku,  'limit_nominal': limitPindahBuku},
+          {'tcode': '1000', 'min_nominal': minSetorTunai,  'limit_nominal': limitSetorTunai,  'max_nominal': maxSetorTunai},
+          {'tcode': '1100', 'min_nominal': minTarikTunai,  'limit_nominal': limitTarikTunai,  'max_nominal': maxTarikTunai},
+          {'tcode': '2300', 'min_nominal': minPindahBuku,  'limit_nominal': limitPindahBuku,  'max_nominal': maxPindahBuku},
         ],
       };
       if (userId != null && userId.trim().isNotEmpty) body['userid'] = userId.trim();
