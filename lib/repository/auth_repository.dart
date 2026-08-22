@@ -200,7 +200,6 @@ class AuthRepository {
   static Future<dynamic> login(
     String token,
     String url,
-    String bprId,
     String username,
     String password,
   ) async {
@@ -208,9 +207,12 @@ class AuthRepository {
     final normalizedUsername = _normalizeUpper(username);
     final plainPassword = _decodeBase64(password.trim());
 
-    // PATCH: field name disamakan dengan LoginRequest struct di Go backend
+    // bpr_id belum diketahui di sisi app sebelum login berhasil (akun admin
+    // dibuat di luar program dan bpr_id-nya melekat di akun itu sendiri,
+    // bukan dipilih di form login) — jadi TIDAK dikirim/di-hardcode di sini.
+    // Backend yang menentukan bpr_id dari user_id + password, dan
+    // mengembalikannya lewat field "bpr_id" di response.
     final Map<String, dynamic> json = {
-      "bpr_id":   bprId,
       "user_id":  normalizedUsername,  // ← was "userid"
       "password": plainPassword,        // ← was "pass"
     };
@@ -232,8 +234,11 @@ class AuthRepository {
       }
 
       final isSuccess = decoded['code'] == '000';
-      // Login response dari web service: { token, userid, nama, kd_kantor, akses }
+      // Login response dari web service: { token, userid, nama, kd_kantor, bpr_id, akses }
       final rawData = decoded['data'] ?? {};
+
+      // bpr_id ASLI datang dari response server, bukan hardcode/param.
+      final bprId = rawData is Map ? (rawData['bpr_id'] ?? '').toString() : '';
 
       final mappedData = _mapLoginDataToOldShape(
         rawData is Map ? Map<String, dynamic>.from(rawData) : {},
@@ -254,7 +259,7 @@ class AuthRepository {
           );
 
           final usersModel = UsersModel(
-            bprId:      bprId,
+            bprId:      loginResp.user.bprId.isNotEmpty ? loginResp.user.bprId : bprId,
             usersId:    loginResp.user.userId,
             namaUsers:  loginResp.user.namaUser,
             kodeKantor: loginResp.user.kdKantor,
