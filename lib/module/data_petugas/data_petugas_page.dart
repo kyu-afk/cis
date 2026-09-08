@@ -719,8 +719,35 @@ class DataPetugasPage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
+                // BATCH (untuk tambah dan edit)
+                if (isFormMode) ...[
+                  _fieldLabel('Batch'),
+                  TextFormField(
+                    controller: notifier.batchCtrl,
+                    readOnly: isReadOnly,
+                    decoration: _inputDecoration('Batch',
+                        fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white).copyWith(
+                      errorText: notifier.manualErrors['batch'],
+                    ),
+                    validator: null,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Akses / Limit Transaksi (hanya tambah & edit)
                 if (isFormMode) ...[
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: notifier.antarKantor,
+                        onChanged: notifier.toggleAntarKantor,
+                        activeColor: colorPrimary,
+                      ),
+                      const Text('Antar Kantor', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                  _fieldNote('* Kolektor bisa transaksi lintas kantor (di luar kantor tempat dia terdaftar)'),
+                  const SizedBox(height: 16),
                   _sectionHeader('Akses / Limit Transaksi'),
                   const SizedBox(height: 12),
                   if (notifier.manualErrors['akses'] != null)

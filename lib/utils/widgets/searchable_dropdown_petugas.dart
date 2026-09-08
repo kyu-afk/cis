@@ -12,6 +12,11 @@ class SearchableDropdownPetugas extends StatefulWidget {
   final String hintText;
   final bool isReadOnly;
   final bool Function(DataPetugasModel)? additionalFilter;
+  // Kalau true, daftar petugas diambil dari database webservice lokal
+  // (inquiryCollectorDb) alih-alih middleware/backend (inquiryCollector).
+  // Dipakai khusus di halaman Reset MPIN, karena mpin_salah/blokir_mpin
+  // sekarang bersumber dari webservice, bukan backend.
+  final bool useLocalDb;
 
   const SearchableDropdownPetugas({
     super.key,
@@ -20,6 +25,7 @@ class SearchableDropdownPetugas extends StatefulWidget {
     this.hintText = 'Cari nama kolektor...',
     this.isReadOnly = false,
     this.additionalFilter,
+    this.useLocalDb = false,
   });
 
   @override
@@ -62,7 +68,9 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
     setState(() => _isLoading = true);
 
     final sessionUser = await Pref().getUsers();
-    final result = await CollectorRepository.inquiryCollector(limit: 500);
+    final result = widget.useLocalDb
+        ? await CollectorRepository.inquiryCollectorDb(limit: 500)
+        : await CollectorRepository.inquiryCollector(limit: 500);
     if (result['value'] == 1) {
       final List<dynamic> data = result['data'] ?? [];
       final allFiltered = data

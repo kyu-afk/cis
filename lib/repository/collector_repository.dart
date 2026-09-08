@@ -391,6 +391,8 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     String? bprId,
     String? namaKantor,
     String? hrmEmployeeId,
+    bool antarKantor = false,
+    String? batch,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
   }) async {
@@ -412,6 +414,8 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "kd_collector": kodePetugas,
         "nosbb": noSbb,
         "nama_sbb": namaSbb,
+        "antar_kantor": antarKantor,
+        "batch": batch ?? '',
       };
       if (aksesData != null) {
         body['akses_setor'] = (aksesData['akses_setor'] == true) ? 'Y' : 'N';
@@ -457,6 +461,8 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     String? bprId,
     String? namaKantor,
     String? hrmEmployeeId,
+    bool antarKantor = false,
+    String? batch,
     Map<String, dynamic>? limitData,
     Map<String, bool>? aksesData,
   }) async {
@@ -478,6 +484,8 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
         "kd_collector": kodePetugas,
         "nosbb": noSbb,
         "nama_sbb": namaSbb,
+        "antar_kantor": antarKantor,
+        "batch": batch ?? '',
       };
       if (password != null && password.isNotEmpty) {
         body['password'] = password;

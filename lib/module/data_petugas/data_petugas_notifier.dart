@@ -39,6 +39,8 @@ class DataPetugasModel {
   bool aksesTransfer = false;
   bool aksesPpob = false;
   bool aksesKredit = false;
+  bool antarKantor = false;
+  String? batch;
   bool? transaksiKolektor;
   // Status mentah buka/tutup: 'A' (dibuka), 'C' (ditutup), 'B' (diblokir admin).
   // Diisi belakangan dari inquiry-db lokal (lihat laporan_data_petugas_page.dart).
@@ -81,6 +83,8 @@ class DataPetugasModel {
     this.aksesTransfer = false,
     this.aksesPpob = false,
     this.aksesKredit = false,
+    this.antarKantor = false,
+    this.batch,
     this.transaksiKolektor,
     this.mpin,
     this.mpinLock,
@@ -90,7 +94,12 @@ class DataPetugasModel {
 
   factory DataPetugasModel.fromJson(Map<String, dynamic> json) {
     return DataPetugasModel(
-      id: (json['id'] ?? '').toString(),
+      // PATCH: kalau response bawa backend_id terpisah (kasus inquiry-db
+      // lokal webservice), pakai itu — karena backend_id itu yang dikenal
+      // middleware saat aksi (reset/block/dll) diteruskan ke sana. Response
+      // dari middleware sendiri cuma punya "id" (yang memang id middleware),
+      // jadi fallback ke situ tetap benar untuk kasus itu.
+      id: (json['backend_id'] ?? json['id'] ?? '').toString(),
       userId: (json['userid'] ?? json['user_id'] ?? '').toString(),
       nama: (json['nama'] ?? '').toString(),
       noHp: (json['nohp'] ?? '').toString(),
@@ -121,6 +130,8 @@ class DataPetugasModel {
       aksesTransfer: (json['akses_transfer'] ?? 'N').toString().toUpperCase() == 'Y',
       aksesPpob: (json['akses_ppob'] ?? 'N').toString().toUpperCase() == 'Y',
       aksesKredit: (json['akses_kredit'] ?? 'N').toString().toUpperCase() == 'Y',
+      antarKantor: json['antar_kantor'] == true,
+      batch: json['batch']?.toString(),
       transaksiKolektor: json['transaksi_kolektor'] == true,
       mpin: (json['mpin'] ?? '').toString(),
       mpinLock: (json['mpin_lock'] ?? '').toString(),
@@ -411,6 +422,7 @@ class DataPetugasNotifier extends ChangeNotifier {
   final kodePetugasCtrl = TextEditingController();
   final noSbbCtrl = TextEditingController();
   final namaSbbCtrl = TextEditingController();
+  final batchCtrl = TextEditingController();
   final alasanCtrl = TextEditingController();
 
   // Limit controllers
@@ -436,6 +448,10 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool aksesTransfer = false;
   bool aksesPpob = false;
   bool aksesKredit = false;
+
+  // Antar Kantor: kolektor boleh transaksi lintas kantor (di luar kd_kantor
+  // tempat dia terdaftar). Ditampilkan di atas section Akses/Limit Transaksi.
+  bool antarKantor = false;
 
   // Enable/disable limit fields
   bool enableLimitSetor = false;
@@ -945,6 +961,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     kodePetugasCtrl.clear();
     noSbbCtrl.clear();
     namaSbbCtrl.clear();
+    batchCtrl.clear();
     alasanCtrl.clear();
     
     limitSetorMinCtrl.text = '0';
@@ -968,6 +985,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     aksesTransfer = false;
     aksesPpob = false;
     aksesKredit = false;
+    antarKantor = false;
     enableLimitSetor = false;
     enableLimitTarik = false;
     enableLimitTransfer = false;
@@ -986,6 +1004,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     kodePetugasCtrl.text = p.kodePetugas ?? '';
     noSbbCtrl.text = p.noSbb ?? '';
     namaSbbCtrl.text = p.namaSbb ?? '';
+    batchCtrl.text = p.batch ?? '';
     passwordCtrl.clear();
     
     aksesSetor = p.aksesSetor;
@@ -993,6 +1012,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     aksesTransfer = p.aksesTransfer;
     aksesPpob = p.aksesPpob;
     aksesKredit = p.aksesKredit;
+    antarKantor = p.antarKantor;
     
     if (aksesSetor) {
       limitSetorMinCtrl.text = _fmtCtrl(p.limitSetorMin);
@@ -1085,6 +1105,11 @@ class DataPetugasNotifier extends ChangeNotifier {
     if (selectedPetugas != null) {
       _isiForm(selectedPetugas!);
     }
+    notifyListeners();
+  }
+
+  void toggleAntarKantor(bool? value) {
+    antarKantor = value ?? false;
     notifyListeners();
   }
 
@@ -1184,6 +1209,14 @@ class DataPetugasNotifier extends ChangeNotifier {
       final namaSbbError = _validateNamaSbbManual(namaSbbCtrl.text.trim());
       if (namaSbbError != null) {
         errors['namaSbb'] = namaSbbError;
+        allValid = false;
+      }
+    }
+    
+    if (isTambah || isEdit) {
+      final batchError = _validateBatchManual(batchCtrl.text.trim());
+      if (batchError != null) {
+        errors['batch'] = batchError;
         allValid = false;
       }
     }
@@ -1356,6 +1389,20 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   String? _validateNoSbbManual(String value) {
     if (value.isEmpty) return 'No SBB wajib diisi';
+    return null;
+  }
+
+  String? _validateBatchManual(String value) {
+    if (value.isEmpty) {
+      return 'Batch wajib diisi';
+    }
+    final isDuplicate = _list.any((p) {
+      if (drawerMode == 'edit' && p.userId == selectedPetugas?.userId) return false;
+      return p.batch == value;
+    });
+    if (isDuplicate) {
+      return 'Batch sudah digunakan oleh kolektor lain';
+    }
     return null;
   }
 
@@ -2052,6 +2099,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     _addChange(changes, 'Kode Kolektor', old.kodePetugas, kodePetugasCtrl.text.trim());
     _addChange(changes, 'No SBB', old.noSbb, noSbbCtrl.text.trim());
     _addChange(changes, 'Nama SBB', old.namaSbb, namaSbbCtrl.text.trim());
+    _addChange(changes, 'Batch', old.batch, batchCtrl.text.trim());
 
     final oldKantor = getNamaKantor(old.kdKantor);
     final newKantor = selectedKantor?.namaKantor ?? '-';
@@ -2064,6 +2112,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     _addBoolChange(changes, 'Akses Transfer', old.aksesTransfer, aksesTransfer);
     _addBoolChange(changes, 'Akses PPOB', old.aksesPpob, aksesPpob);
     _addBoolChange(changes, 'Akses Kredit', old.aksesKredit, aksesKredit);
+    _addBoolChange(changes, 'Antar Kantor', old.antarKantor, antarKantor);
     
     if (isChangePassword && passwordCtrl.text.trim().isNotEmpty) {
       changes['Password'] = {'old': '********', 'new': '******** (diubah)'};
@@ -2208,6 +2257,8 @@ class DataPetugasNotifier extends ChangeNotifier {
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           hrmEmployeeId: selectedHrmEmployee?.id,
+          antarKantor: antarKantor,
+          batch: batchCtrl.text.trim(),
           limitData: limitData,
           aksesData: aksesData,
         );
@@ -2230,6 +2281,8 @@ class DataPetugasNotifier extends ChangeNotifier {
           namaSbb: namaSbbCtrl.text.trim(),
           password: isChangePassword ? passwordCtrl.text.trim() : null,
           hrmEmployeeId: selectedHrmEmployee?.id ?? selectedPetugas?.hrmEmployeeId,
+          antarKantor: antarKantor,
+          batch: batchCtrl.text.trim(),
           limitData: limitData,
           aksesData: aksesData,
         );
@@ -2383,6 +2436,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     kodePetugasCtrl.dispose();
     noSbbCtrl.dispose();
     namaSbbCtrl.dispose();
+    batchCtrl.dispose();
     alasanCtrl.dispose();
     limitSetorMinCtrl.dispose();
     limitSetorMaxCtrl.dispose();

@@ -112,6 +112,7 @@ class ResetMpinPage extends StatelessWidget {
             controller: notifier.namaPetugasInput,
             onPetugasSelected: notifier.onPetugasSelected,
             hintText: 'Cari nama kolektor...',
+            useLocalDb: true,
             additionalFilter: (petugas) {
               final mpinLock = petugas.mpinLock?.toUpperCase() ?? '';
               return mpinLock == 'Y';
