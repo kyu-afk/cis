@@ -12,10 +12,6 @@ class SearchableDropdownPetugas extends StatefulWidget {
   final String hintText;
   final bool isReadOnly;
   final bool Function(DataPetugasModel)? additionalFilter;
-  // Kalau true, daftar petugas diambil dari database webservice lokal
-  // (inquiryCollectorDb) alih-alih middleware/backend (inquiryCollector).
-  // Dipakai khusus di halaman Reset MPIN, karena mpin_salah/blokir_mpin
-  // sekarang bersumber dari webservice, bukan backend.
   final bool useLocalDb;
 
   const SearchableDropdownPetugas({
@@ -41,8 +37,6 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
   final TextEditingController _internalController = TextEditingController();
   Timer? _debounceTimer;
 
-  // Field ini dipakai supaya daftar saran tampil MENGAMBANG (overlay) di atas
-  // konten lain, bukan render inline yang mendorong layout ke bawah.
   final LayerLink _layerLink = LayerLink();
   final GlobalKey _fieldKey = GlobalKey();
   OverlayEntry? _overlayEntry;

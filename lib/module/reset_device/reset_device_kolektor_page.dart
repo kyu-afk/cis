@@ -105,9 +105,6 @@ class ResetDeviceKolektorNotifier extends ChangeNotifier {
         final List<dynamic> data = result['data'] ?? [];
         var list = data.map((e) => KolektorDeviceInfo.fromJson(Map<String, dynamic>.from(e))).toList();
 
-        // PATCH: filter kantor — cuma boleh nemuin teller di kantor sendiri
-        // (kecuali session kode kantor "000" yang lihat semua). Sebelumnya
-        // filter ini kelewat waktu halaman ini di-desain ulang jadi search-based.
         list = UserLevelHelper.applyKantorFilter(
           list: list,
           users: _sessionUser,

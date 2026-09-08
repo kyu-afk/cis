@@ -185,18 +185,6 @@ static Future<Map<String, dynamic>> inquirySbbByAccount({
     }
   }
 
-  // ==================== INQUIRY COLLECTOR ====================
-  // ==================== INQUIRY DARI DB LOKAL ====================
-  // Dipakai KHUSUS untuk menu Buka/Tutup Transaksi Kolektor.
-  // Endpoint ini baca langsung dari database lokal (kolom stsaktif), yang
-  // disinkron langsung oleh bukaTransaksiCollector/tutupTransaksiCollector —
-  // jadi status di sini SELALU akurat, tidak seperti field 'transaksi_kolektor'
-  // dari inquiryCollector() biasa (yang datanya dari middleware/webservice lama).
-  //
-  // Status yang dikembalikan tiap item: 'stsaktif' = 'A' (terbuka) atau 'C' (tertutup).
-  // ==================== RESET DEVICE ====================
-  // Kosongkan login_device_id, login_device_name, & fcm_token milik
-  // kolektor, supaya dia bisa login dari device lain.
   static Future<Map<String, dynamic>> resetDevice({required String userid}) async {
     try {
       final dio = await _dioWithToken();
