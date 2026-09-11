@@ -9,6 +9,7 @@ import 'package:cis_menu/module/laporan/laporan_transaksi_petugas_page.dart'; //
 import 'package:cis_menu/module/laporan/laporan_histori_transaksi_kolektor_page.dart';
 import 'package:cis_menu/module/reset_device/reset_device_teller_page.dart';
 import 'package:cis_menu/module/reset_device/reset_device_kolektor_page.dart';
+import 'package:cis_menu/module/reset_device/reset_device_cis_page.dart';
 import 'package:cis_menu/module/menu/menu_notifier.dart';
 import 'package:cis_menu/module/mpin/cetak_mpin_page.dart';
 import 'package:cis_menu/module/mpin/generate_mpin_page.dart';
@@ -60,6 +61,7 @@ class MenuPage extends StatelessWidget {
     80: KelolaFotoPage(),
     90: ResetDeviceTellerPage(),
     91: ResetDeviceKolektorPage(),
+    92: ResetDeviceCisPage(),
   };
 
   List<_MenuItem> _menuItems(MenuNotifier n) => [
@@ -101,6 +103,8 @@ class MenuPage extends StatelessWidget {
         ]),
         const _MenuItem('GANTI DEVICE', Icons.phonelink_erase,
             menu: 'GANTI DEVICE', children: [
+          _MenuItem('User CIS', Icons.admin_panel_settings, page: 92,
+              menu: 'GANTI DEVICE', submenu: 'CIS'),
           _MenuItem('Teller', Icons.account_balance, page: 90,
               menu: 'GANTI DEVICE', submenu: 'TELLER'),
           _MenuItem('Kolektor', Icons.person_search, page: 91,

@@ -66,6 +66,17 @@ class UsersAccessNotifier extends ChangeNotifier {
   static const String semuaKantorKode = '000';
   bool allKantorAccess = false;
 
+  // ==================== ALL DEVICE ====================
+  // Kalau dicentang, user ini boleh login CIS dari device manapun (tidak
+  // dikunci ke 1 device/browser terakhir). Kalau tidak dicentang, berlaku
+  // kunci 1 akun = 1 device (device/browser terakhir dipakai login).
+  bool allDevice = false;
+
+  void setAllDevice(bool value) {
+    allDevice = value;
+    notifyListeners();
+  }
+
   KantorItem get semuaKantorItem => KantorItem(semuaKantorKode, 'SEMUA KANTOR');
 
   /// Centang / lepas centang "Semua Kantor".
@@ -517,6 +528,7 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlTgl.clear();
     isChangePassword = false;
     allKantorAccess = false;
+    allDevice = false;
     selectedHrmEmployee = null;
     hrmSearchController.clear();
     formKey.currentState?.reset();
@@ -531,6 +543,7 @@ class UsersAccessNotifier extends ChangeNotifier {
     ctrlTgl.text = rawTgl.isNotEmpty ? rawTgl.split(' ')[0].split('T')[0] : '';
     ctrlPass.clear();
     isChangePassword = false;
+    allDevice = u.allDevice == true;
 
     allKantorAccess = (u.kdkantor ?? '') == semuaKantorKode;
     selectedKantor = allKantorAccess
@@ -1085,6 +1098,7 @@ class UsersAccessNotifier extends ChangeNotifier {
       tglKadaluarsa: ctrlTgl.text.trim(),
       stsAktif: 'A',
       hrmEmployeeId: selectedHrmEmployee?.id,
+      allDevice: allDevice,
       listFasilitas: fasJson,
     );
 

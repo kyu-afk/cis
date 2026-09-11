@@ -266,6 +266,46 @@ class UsersAccessRepository {
     }
   }
 
+  // ==================== RESET DEVICE USER (CIS) ====================
+  static Future<Map<String, dynamic>> resetDeviceUser({
+    required String bprId,
+    required String userlogin,
+    required String targetUserId,
+    required String term,
+  }) async {
+    try {
+      final dio = await _dioWithToken();
+      final normalizedTargetUserId = _normalizeUserId(targetUserId);
+      final normalizedUserlogin = _normalizeUserId(userlogin);
+
+      final body = {
+        "bpr_id": bprId,
+        "userlogin": normalizedUserlogin,
+        "term": term,
+        "userid": normalizedTargetUserId,
+      };
+
+      if (kDebugMode) {
+        print("ENDPOINT URL RESET DEVICE USER : ${NetworkURL.resetDeviceUser()}");
+        print("REQUEST RESET DEVICE USER : ${jsonEncode(body)}");
+      }
+
+      final response = await dio.post(NetworkURL.resetDeviceUser(), data: body);
+      final decoded = _safeDecode(response.data);
+
+      if (kDebugMode) print("RESPONSE DATA RESET DEVICE USER : $decoded");
+
+      return {
+        "value": decoded['code'] == '000' ? 1 : 0,
+        "message": decoded['message'] ?? "",
+        "code": decoded['code'],
+      };
+    } catch (e) {
+      if (kDebugMode) print("ERROR RESET DEVICE USER : $e");
+      return {"value": 0, "message": _extractError(e)};
+    }
+  }
+
   // ==================== INSERT / UPDATE USERS ====================
   static Future<Map<String, dynamic>> saveUsers({
     required String url,
@@ -281,6 +321,7 @@ class UsersAccessRepository {
     required String tglKadaluarsa,
     required String stsAktif,
     String? hrmEmployeeId,
+    bool allDevice = false,
     required String listFasilitas,
   }) async {
     try {
@@ -315,6 +356,7 @@ class UsersAccessRepository {
         "tglexp": tglKadaluarsa,
         "lvluser": 1,
         "hrm_employee_id": hrmEmployeeId ?? "",
+        "all_device": allDevice,
         "akses": aksesList,
       };
 

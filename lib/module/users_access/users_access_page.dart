@@ -685,7 +685,37 @@ class UsersAccessPage extends StatelessWidget {
                   ),
                   validator: null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+
+                // ── All Device ──
+                // Kalau dicentang: user boleh login CIS dari device manapun,
+                // tanpa dikunci ke device/browser terakhir yang dipakai login.
+                Row(
+                  children: [
+                    Checkbox(
+                      value: notifier.allDevice,
+                      onChanged: isReadOnly ? null : (v) => notifier.setAllDevice(v ?? false),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: isReadOnly ? null : () => notifier.setAllDevice(!notifier.allDevice),
+                        child: const Text('All Device', style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 40, bottom: 4),
+                  child: Text(
+                    'Kalau dicentang, user bisa login dari device/browser manapun. '
+                    'Kalau tidak, user hanya bisa login dari device/browser terakhir yang dipakai login ',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
                 // ── Fasilitas (hanya form mode) ──
                 if (isFormMode) ...[

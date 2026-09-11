@@ -56,6 +56,10 @@ class NetworkURL {
   // TAMBAHKAN RESET PASSWORD
   static String resetPasswordUser() => "$url_go3/cis/user/reset-password";
 
+  // Reset Device untuk akun login CIS sendiri (admin/backoffice) —
+  // menu "Ganti Device" > "CIS".
+  static String resetDeviceUser() => "$url_go3/cis/user/reset-device";
+
   // ---------- Collector (Petugas) ----------
   static String inquiryCollector() => "$url_go3/cis/collector/inquiry";
   static String inquiryCollectorDb() => "$url_go3/cis/collector/inquiry-db";

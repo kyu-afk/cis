@@ -119,7 +119,7 @@ class SetupTransaksiPage extends StatelessWidget {
           ...List.generate(value.tcodeList.length, (index) {
             final row = value.tcodeList[index];
             final code = row['tcode'] ?? '';
-            final name = row['keterangan'] ?? '';
+            final name = row['display_keterangan'] ?? row['keterangan'] ?? '';
             final isConfigured = row['is_configured'] == true;
             final isSelected = value.selectedTcode == code;
 

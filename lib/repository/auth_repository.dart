@@ -201,8 +201,10 @@ class AuthRepository {
     String token,
     String url,
     String username,
-    String password,
-  ) async {
+    String password, {
+    String? deviceId,
+    String? deviceName,
+  }) async {
 
     final normalizedUsername = _normalizeUpper(username);
     final plainPassword = _decodeBase64(password.trim());
@@ -212,9 +214,15 @@ class AuthRepository {
     // bukan dipilih di form login) — jadi TIDAK dikirim/di-hardcode di sini.
     // Backend yang menentukan bpr_id dari user_id + password, dan
     // mengembalikannya lewat field "bpr_id" di response.
+    //
+    // device_id/device_name dikirim untuk fitur "1 akun = 1 device" — kalau
+    // akun ini all_device=false, backend akan menolak login dari device lain
+    // selain yang terakhir tercatat.
     final Map<String, dynamic> json = {
       "user_id":  normalizedUsername,  // ← was "userid"
       "password": plainPassword,        // ← was "pass"
+      "device_id":   deviceId ?? '',
+      "device_name": deviceName ?? '',
     };
 
     final dio = _dio();

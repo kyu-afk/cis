@@ -129,11 +129,29 @@ class KelolaFotoRepository {
 
       final code = (decoded['code'] ?? '').toString();
       final data = decoded['data'];
+      final dataMap = data is Map ? Map<String, dynamic>.from(data) : null;
+
+      // BUG FIX: core banking kadang balikin code='000' (status "berhasil")
+      // TAPI dengan seluruh field response kosong kalau no_rek yang
+      // dikirim salah/tidak ada — bukan error eksplisit. Jadi status code
+      // saja tidak cukup; field kunci (no_rek/nama/nocif) juga harus dicek
+      // ada isinya, kalau tidak dianggap "rekening tidak ditemukan".
+      bool hasContent(Map<String, dynamic>? m) {
+        if (m == null) return false;
+        for (final key in ['no_rek', 'nama', 'nocif']) {
+          final v = m[key];
+          if (v != null && v.toString().trim().isNotEmpty) return true;
+        }
+        return false;
+      }
+
+      final found = code == '000' && hasContent(dataMap);
+      final rawMessage = (decoded['message'] ?? '').toString();
 
       return {
-        'value': code == '000' && data is Map ? 1 : 0,
-        'message': (decoded['message'] ?? '').toString(),
-        'data': data is Map ? Map<String, dynamic>.from(data) : null,
+        'value': found ? 1 : 0,
+        'message': found || rawMessage.trim().isNotEmpty ? rawMessage : 'Rekening tidak ditemukan.',
+        'data': found ? dataMap : null,
       };
     } catch (e) {
       if (kDebugMode) print('ERROR INQUIRY ACCOUNT (nasabah): $e');
@@ -352,8 +370,10 @@ class KelolaFotoRepository {
   }) async {
     try {
       final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
 
       final body = {
+        'bpr_id': session.bprId,
         'no_cif': noCif,
         'nama': nama,
       };
@@ -393,8 +413,10 @@ class KelolaFotoRepository {
   }) async {
     try {
       final dio = await _dioWithToken();
+      final session = await Pref().getUsers();
 
       final body = {
+        'bpr_id': session.bprId,
         'search': search,
         'page': page,
         'size': size,

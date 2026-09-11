@@ -34,6 +34,9 @@ class UsersAccessModel {
   int? maxOtor;
   int? minOtor;
   int? stslogin;
+  bool? allDevice;
+  String? loginDeviceId;
+  String? loginDeviceName;
   List<AksesModel>? akses;
 
   UsersAccessModel({
@@ -71,6 +74,9 @@ class UsersAccessModel {
     this.maxOtor,
     this.minOtor,
     this.stslogin,
+    this.allDevice,
+    this.loginDeviceId,
+    this.loginDeviceName,
     this.akses,
   });
 
@@ -135,6 +141,9 @@ class UsersAccessModel {
       maxOtor: parseInt('max_otor', 'MaxOtor'),
       minOtor: parseInt('min_otor', 'MinOtor'),
       stslogin: parseInt('stslogin', 'StsLogin'),
+      allDevice: (json['all_device'] ?? json['AllDevice']) == true,
+      loginDeviceId: (json['login_device_id'] ?? json['LoginDeviceID'])?.toString(),
+      loginDeviceName: (json['login_device_name'] ?? json['LoginDeviceName'])?.toString(),
       akses: aksesList,
     );
   }
@@ -175,6 +184,7 @@ class UsersAccessModel {
       'max_otor': maxOtor,
       'min_otor': minOtor,
       'stslogin': stslogin,
+      'all_device': allDevice,
       'akses': akses?.map((e) => e.toJson()).toList(),
     };
   }

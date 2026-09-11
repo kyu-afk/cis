@@ -2,6 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:cis_menu/repository/setup_transaksi_repository.dart';
 import 'package:cis_menu/utils/colors.dart';
 
+// Urutan & keterangan 9 tcode utama — DIPAKU (tidak ikut urutan/keterangan
+// mentah dari dashboard MTD), karena jarang berubah. TCode di luar 9 ini
+// (kalau MTD suatu saat menambah tcode baru) otomatis lanjut ditaruh di
+// bawah, urutannya mengikuti urutan asli dari MTD.
+class _PinnedTcode {
+  final int order;
+  final String label;
+  const _PinnedTcode(this.order, this.label);
+}
+
+const Map<String, _PinnedTcode> _pinnedTcodeOrder = {
+  '4600': _PinnedTcode(0, 'Setor Tunai'),
+  '1100': _PinnedTcode(1, 'Tarik Tunai'),
+  '2300': _PinnedTcode(2, 'Pindah Buku'),
+  '2100': _PinnedTcode(3, 'Transfer Out'),
+  '2200': _PinnedTcode(4, 'Transfer In'),
+  '5000': _PinnedTcode(5, 'PPOB Beli'),
+  '5010': _PinnedTcode(6, 'PPOB Bayar'),
+  '2310': _PinnedTcode(7, 'QRIS MTD'),
+  '1000': _PinnedTcode(8, 'Create Token'),
+};
+
+// Susun ulang list tcode: 9 tcode di _pinnedTcodeOrder ditaruh paling atas
+// sesuai urutan & label yang dipaku, sisanya (tcode baru dari MTD yang belum
+// dikenal) lanjut di bawah dengan urutan & keterangan asli apa adanya.
+List<Map<String, dynamic>> _applyPinnedTcodeOrder(List<Map<String, dynamic>> list) {
+  final pinned = <MapEntry<int, Map<String, dynamic>>>[];
+  final others = <Map<String, dynamic>>[];
+
+  for (final item in list) {
+    final tcode = (item['tcode'] ?? '').toString().trim();
+    final pin = _pinnedTcodeOrder[tcode];
+    if (pin != null) {
+      final updated = Map<String, dynamic>.from(item);
+      // 'keterangan' TETAP nilai asli dari MTD (dipakai saat proses simpan/
+      // konfirmasi ke backend) — yang diganti cuma label tampilan di list ini.
+      updated['display_keterangan'] = pin.label;
+      pinned.add(MapEntry(pin.order, updated));
+    } else {
+      others.add(item);
+    }
+  }
+
+  pinned.sort((a, b) => a.key.compareTo(b.key));
+  return [...pinned.map((e) => e.value), ...others];
+}
+
 class SetupTransaksiNotifier extends ChangeNotifier {
   final BuildContext context;
 
@@ -71,11 +118,11 @@ class SetupTransaksiNotifier extends ChangeNotifier {
 
     if (result['value'] == 1) {
       final List<dynamic> raw = result['data'] ?? [];
-      tcodeList = raw.map((e) => {
+      tcodeList = _applyPinnedTcodeOrder(raw.map((e) => {
         'tcode'        : (e['tcode'] ?? '').toString(),
         'keterangan'   : (e['keterangan'] ?? '').toString(),
         'is_configured': false,
-      }).toList();
+      } as Map<String, dynamic>).toList());
 
       // Cek tiap tcode apakah sudah punya konfigurasi
       for (int i = 0; i < tcodeList.length; i++) {
@@ -103,9 +150,11 @@ class SetupTransaksiNotifier extends ChangeNotifier {
   // ==================== PILIH TCODE ====================
   Future<void> openTcode(Map<String, dynamic> row) async {
     selectedTcode        = row['tcode'];
+    // _selectedKeterangan TETAP nilai asli (dikirim ke backend saat simpan);
+    // ketTcode.text pakai label pinned kalau ada, cuma buat tampilan form.
     _selectedKeterangan  = row['keterangan'];
     selectedTcodeController.text = row['tcode'];
-    ketTcode.text        = row['keterangan'];
+    ketTcode.text        = row['display_keterangan'] ?? row['keterangan'];
     showDetail           = false;
     isEditMode           = true;
     _resetForm();

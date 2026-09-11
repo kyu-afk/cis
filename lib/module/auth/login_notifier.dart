@@ -9,6 +9,7 @@ import 'login_page.dart';
 import '../menu/menu_page.dart';
 import 'hari_libur_page.dart';
 import '../../utils/hari_libur_exception.dart';
+import '../../utils/device_helper.dart';
 
 class LoginNotifier extends ChangeNotifier {
   final BuildContext context;
@@ -124,11 +125,16 @@ class LoginNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final deviceId = await DeviceHelper.getDeviceId();
+      final deviceName = await DeviceHelper.getDeviceName();
+
       final value = await AuthRepository.login(
         token,
         NetworkURL.login(),
         username.text.trim(),
         password.text.trim(),
+        deviceId: deviceId,
+        deviceName: deviceName,
       );
 
       isLoading = false;
