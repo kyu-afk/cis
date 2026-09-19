@@ -2,6 +2,7 @@ import 'package:cis_menu/module/mpin/reset_mpin_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cis_menu/utils/colors.dart';
+import 'package:cis_menu/module/mpin/mpin_status_validator.dart';
 import 'package:cis_menu/utils/widgets/searchable_dropdown_petugas.dart';
 
 class ResetMpinPage extends StatelessWidget {
@@ -112,10 +113,7 @@ class ResetMpinPage extends StatelessWidget {
             controller: notifier.namaPetugasInput,
             onPetugasSelected: notifier.onPetugasSelected,
             hintText: 'Cari nama kolektor...',
-            additionalFilter: (petugas) {
-              final mpinLock = petugas.mpinLock?.toUpperCase() ?? '';
-              return mpinLock == 'Y';
-            },
+            selectionValidator: MpinStatusValidator.forReset,
           )
                   ],
       ),

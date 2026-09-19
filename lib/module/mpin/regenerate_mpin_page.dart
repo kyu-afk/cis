@@ -2,6 +2,7 @@ import 'package:cis_menu/module/mpin/regenerate_mpin_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cis_menu/utils/colors.dart';
+import 'package:cis_menu/module/mpin/mpin_status_validator.dart';
 import 'package:cis_menu/utils/widgets/searchable_dropdown_petugas.dart';
 
 class RegenerateMpinPage extends StatelessWidget {
@@ -112,11 +113,7 @@ class RegenerateMpinPage extends StatelessWidget {
             controller: notifier.namaPetugasInput,
             onPetugasSelected: notifier.onPetugasSelected,
             hintText: 'Cari nama kolektor...',
-            additionalFilter: (petugas) {
-              final mpin = petugas.mpin ?? '';
-              final mpinCetak = petugas.mpinCetak?.toUpperCase() ?? '';
-              return mpin.isNotEmpty && mpinCetak == 'Y';
-            },
+            selectionValidator: MpinStatusValidator.forRegenerate,
           )
         ],
       ),

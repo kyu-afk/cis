@@ -14,6 +14,12 @@ class SearchableDropdownPetugas extends StatefulWidget {
   final bool Function(DataPetugasModel)? additionalFilter;
   final bool useLocalDb;
 
+  /// Validasi saat nama dipilih. Jika mengembalikan String (pesan error),
+  /// kolektor TIDAK diproses dan pesan tersebut ditampilkan dalam dialog.
+  /// Kembalikan null jika kolektor boleh diproses.
+  /// Berbeda dengan [additionalFilter] yang menyembunyikan nama dari hasil pencarian.
+  final String? Function(DataPetugasModel)? selectionValidator;
+
   const SearchableDropdownPetugas({
     super.key,
     required this.controller,
@@ -22,6 +28,7 @@ class SearchableDropdownPetugas extends StatefulWidget {
     this.isReadOnly = false,
     this.additionalFilter,
     this.useLocalDb = false,
+    this.selectionValidator,
   });
 
   @override
@@ -105,11 +112,76 @@ class _SearchableDropdownPetugasState extends State<SearchableDropdownPetugas> {
   }
 
   void _selectPetugas(DataPetugasModel petugas) {
+    final errorMessage = widget.selectionValidator?.call(petugas);
+    if (errorMessage != null) {
+      // Kolektor ditolak: kosongkan input, tutup dropdown, tampilkan pesan error.
+      _internalController.clear();
+      widget.controller.clear();
+      _filteredList = [];
+      _setShowDropdown(false);
+      _focusNode.unfocus();
+      _showErrorDialog(petugas.nama ?? '-', errorMessage);
+      return;
+    }
+
     _internalController.text = petugas.nama ?? '';
     widget.controller.text = petugas.nama ?? '';
     widget.onPetugasSelected(petugas);
     _setShowDropdown(false);
     _focusNode.unfocus();
+  }
+
+  void _showErrorDialog(String nama, String message) {
+    const color = Color(0xFFA32D2D);
+    const bgColor = Color(0xFFFCEBEB);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(color: bgColor, shape: BoxShape.circle),
+                child: const Icon(Icons.error_outline, color: color, size: 36),
+              ),
+              const SizedBox(height: 16),
+              const Text('Tidak Dapat Diproses',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+              const SizedBox(height: 10),
+              Text(nama,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54)),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('OK', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ==================== OVERLAY (dropdown mengambang) ====================
