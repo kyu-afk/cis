@@ -721,16 +721,42 @@ class DataPetugasPage extends StatelessWidget {
 
                 // BATCH (untuk tambah dan edit)
                 if (isFormMode) ...[
-                  _fieldLabel('Batch'),
-                  TextFormField(
-                    controller: notifier.batchCtrl,
-                    readOnly: isReadOnly,
-                    decoration: _inputDecoration('Batch',
-                        fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white).copyWith(
-                      errorText: notifier.manualErrors['batch'],
+                  _fieldLabel('Batch *'),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: notifier.batchCtrl,
+                        readOnly: isReadOnly,
+                        onChanged: notifier.onBatchChanged,
+                        decoration: _inputDecoration('Batch',
+                          suffix: notifier.isBatchVerified
+                              ? const Icon(Icons.verified, size: 20, color: Colors.green)
+                              : null,
+                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white).copyWith(
+                          errorText: notifier.manualErrors['batch'],
+                        ),
+                        validator: null,
+                      ),
                     ),
-                    validator: null,
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 1,
+                      child: ElevatedButton(
+                        onPressed: isReadOnly || notifier.isLoadingVerifikasiBatch ? null : notifier.verifikasiBatch,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorPrimary,
+                          foregroundColor: colortextwhite,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        child: notifier.isLoadingVerifikasiBatch
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: colortextwhite))
+                            : const FittedBox(child: Text('Verifikasi', style: TextStyle(fontWeight: FontWeight.w600))),
+                      ),
+                    ),
+                  ]),
                   const SizedBox(height: 16),
                 ],
 

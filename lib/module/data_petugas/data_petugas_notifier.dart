@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../../models/index.dart';
 import '../../repository/collector_repository.dart';
+import '../../repository/batch_repository.dart';
 import '../../repository/users_access_repository.dart';
 import '../../repository/setup_transaksi_repository.dart';
 import '../../network/network.dart';
@@ -211,6 +212,26 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool isSaving = false;
   bool isLoadingVerifikasi = false;
   bool obscure = true;
+
+  // Verifikasi batch (backend inquiry/user) — batch wajib terverifikasi
+  // sebelum insert. Saat edit, batch lama yang tidak diubah dianggap valid.
+  bool isLoadingVerifikasiBatch = false;
+  String _verifiedBatch = '';
+  String _originalBatch = '';
+  bool get isBatchVerified {
+    final batch = batchCtrl.text.trim();
+    if (batch.isEmpty) return false;
+    if (batch == _verifiedBatch) return true;
+    return drawerMode == 'edit' && batch == _originalBatch;
+  }
+
+  // Batch diubah setelah verifikasi -> status verifikasi gugur.
+  void onBatchChanged(String value) {
+    if (_verifiedBatch.isNotEmpty && value.trim() != _verifiedBatch) {
+      _verifiedBatch = '';
+      notifyListeners();
+    }
+  }
   bool isChangePassword = false;
   bool isUpdatingKantor = false;
 
@@ -962,8 +983,10 @@ class DataPetugasNotifier extends ChangeNotifier {
     noSbbCtrl.clear();
     namaSbbCtrl.clear();
     batchCtrl.clear();
+    _verifiedBatch = '';
+    _originalBatch = '';
     alasanCtrl.clear();
-    
+
     limitSetorMinCtrl.text = '0';
     limitSetorMaxCtrl.text = '0';
     limitSetorPendingCtrl.text = '0';
@@ -1005,6 +1028,8 @@ class DataPetugasNotifier extends ChangeNotifier {
     noSbbCtrl.text = p.noSbb ?? '';
     namaSbbCtrl.text = p.namaSbb ?? '';
     batchCtrl.text = p.batch ?? '';
+    _originalBatch = (p.batch ?? '').trim();
+    _verifiedBatch = '';
     passwordCtrl.clear();
     
     aksesSetor = p.aksesSetor;
@@ -1214,7 +1239,8 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah || isEdit) {
-      final batchError = _validateBatchManual(batchCtrl.text.trim());
+      final batchError = _validateBatchManual(batchCtrl.text.trim()) ??
+          (isBatchVerified ? null : 'Batch belum diverifikasi. Silakan klik tombol Verifikasi terlebih dahulu');
       if (batchError != null) {
         errors['batch'] = batchError;
         allValid = false;
@@ -1467,6 +1493,32 @@ class DataPetugasNotifier extends ChangeNotifier {
 
     isLoadingVerifikasi = false;
     notifyListeners();
+  }
+
+  // ==================== VERIFIKASI BATCH ====================
+  Future<void> verifikasiBatch() async {
+    final batch = batchCtrl.text.trim();
+    if (batch.isEmpty) {
+      _showErrorDialog('Masukkan Batch terlebih dahulu');
+      return;
+    }
+
+    isLoadingVerifikasiBatch = true;
+    notifyListeners();
+
+    final result = await BatchRepository.verifikasiBatch(batch: batch);
+
+    isLoadingVerifikasiBatch = false;
+    if (result['value'] == 1) {
+      _verifiedBatch = batch;
+      _manualErrors.remove('batch');
+      notifyListeners();
+      _showSuccessDialog(result['message']?.toString() ?? 'Batch terverifikasi');
+    } else {
+      _verifiedBatch = '';
+      notifyListeners();
+      _showErrorDialog(result['message']?.toString() ?? 'Batch tidak ditemukan');
+    }
   }
 
   // ==================== DIALOG ====================

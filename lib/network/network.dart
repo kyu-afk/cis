@@ -42,6 +42,8 @@ class NetworkURL {
 
   // ---------- Users ----------
   static String inquiryUsers() => "$url_go3/cis/user/inquiry";
+  // Verifikasi batch teller/kolektor (diteruskan ke backend /inquiry/user).
+  static String inquiryBatch() => "$url_go3/cis/user/inquiry-batch";
   static String insertUsers() => "$url_go3/cis/user/insert";
   static String updateUsers() => "$url_go3/cis/user/update";
 

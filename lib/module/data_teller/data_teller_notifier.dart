@@ -5,6 +5,7 @@ import '../../models/index.dart';
 import '../../pref/pref.dart';
 import '../setup/limit_transaksi/limit_transaksi_notifier.dart' show CurrencyInputFormatter;
 import '../../repository/teller_repository.dart';
+import '../../repository/batch_repository.dart';
 import '../../repository/users_access_repository.dart';
 import '../../network/network.dart';
 import '../../utils/colors.dart';
@@ -140,6 +141,18 @@ class DataTellerNotifier extends ChangeNotifier {
   // Simpan nilai asli dari database untuk validasi
   String _originalNoSbb = '';
   String _originalNamaSbb = '';
+
+  // Verifikasi batch (backend inquiry/user) — batch wajib terverifikasi
+  // sebelum insert. Saat edit, batch lama yang tidak diubah dianggap valid.
+  bool isLoadingVerifikasiBatch = false;
+  String _verifiedBatch = '';
+  String _originalBatch = '';
+  bool get isBatchVerified {
+    final batch = batchCtrl.text.trim();
+    if (batch.isEmpty) return false;
+    if (batch == _verifiedBatch) return true;
+    return drawerMode == 'edit' && batch == _originalBatch;
+  }
 
   // Snapshot nilai limit transaksi SAAT DIMUAT dari server, dipakai buat
   // bandingan "Sebelum -> Sesudah" di popup konfirmasi & deteksi perubahan.
@@ -569,6 +582,15 @@ class DataTellerNotifier extends ChangeNotifier {
   // ==================== LISTENERS ====================
   void _setupListeners() {
     noSbbCtrl.addListener(_onNoSbbChanged);
+    batchCtrl.addListener(_onBatchChanged);
+  }
+
+  // Batch diubah setelah verifikasi -> status verifikasi gugur.
+  void _onBatchChanged() {
+    if (_verifiedBatch.isNotEmpty && batchCtrl.text.trim() != _verifiedBatch) {
+      _verifiedBatch = '';
+      notifyListeners();
+    }
   }
 
   void _onNoSbbChanged() {
@@ -703,7 +725,8 @@ class DataTellerNotifier extends ChangeNotifier {
     
     // Batch (tambah dan edit)
     if (isTambah || isEdit) {
-      final batchError = _validateBatchManual(batchCtrl.text.trim());
+      final batchError = _validateBatchManual(batchCtrl.text.trim()) ??
+          (isBatchVerified ? null : 'Batch belum diverifikasi. Silakan klik tombol Verifikasi terlebih dahulu');
       if (batchError != null) {
         errors['batch'] = batchError;
         allValid = false;
@@ -1155,6 +1178,32 @@ class DataTellerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ==================== VERIFIKASI BATCH ====================
+  Future<void> verifikasiBatch() async {
+    final batch = batchCtrl.text.trim();
+    if (batch.isEmpty) {
+      _showErrorDialog('Masukkan Batch terlebih dahulu');
+      return;
+    }
+
+    isLoadingVerifikasiBatch = true;
+    notifyListeners();
+
+    final result = await BatchRepository.verifikasiBatch(batch: batch, bprId: bprId);
+
+    isLoadingVerifikasiBatch = false;
+    if (result['value'] == 1) {
+      _verifiedBatch = batch;
+      _manualErrors.remove('batch');
+      notifyListeners();
+      _showSuccessDialog(result['message']?.toString() ?? 'Batch terverifikasi');
+    } else {
+      _verifiedBatch = '';
+      notifyListeners();
+      _showErrorDialog(result['message']?.toString() ?? 'Batch tidak ditemukan');
+    }
+  }
+
   // ==================== LOAD DATA ====================
   Future<void> _loadProfile() async {
     final users = await Pref().getUsers();
@@ -1347,6 +1396,8 @@ class DataTellerNotifier extends ChangeNotifier {
     
     _originalNoSbb = '';
     _originalNamaSbb = '';
+    _verifiedBatch = '';
+    _originalBatch = '';
     _originalMinSetorTunai   = '';
     _originalLimitSetorTunai = '';
     _originalMaxSetorTunai   = '';
@@ -1390,6 +1441,8 @@ class DataTellerNotifier extends ChangeNotifier {
 
     _originalNoSbb = teller.noSbb ?? '';
     _originalNamaSbb = teller.namasbb ?? '';
+    _originalBatch = (teller.batch ?? '').trim();
+    _verifiedBatch = '';
 
     selectedKantor = _listKantor.firstWhere(
       (k) => k.kdKantor == teller.kdKantor,
@@ -2402,6 +2455,7 @@ class DataTellerNotifier extends ChangeNotifier {
     scrollController.dispose();
     hrmSearchController.dispose();
     noSbbCtrl.removeListener(_onNoSbbChanged);
+    batchCtrl.removeListener(_onBatchChanged);
     noSbbCtrl.dispose();
     userIdCtrl.dispose();
     namaTellerCtrl.dispose();
