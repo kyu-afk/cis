@@ -38,14 +38,39 @@ class BatchRepository {
       if (kDebugMode) print('VERIFIKASI BATCH RESPONSE: $decoded');
 
       final code = (decoded is Map ? decoded['code'] : '').toString();
-      final ok = code == '000' || code == '200';
       final message = (decoded is Map ? decoded['message'] : null)?.toString() ?? '';
+      final data = decoded is Map && decoded['data'] is Map
+          ? Map<String, dynamic>.from(decoded['data'])
+          : <String, dynamic>{};
+
+      if (code != '000') {
+        return {
+          "value": 0,
+          "message": message.isNotEmpty ? message : 'Batch tidak ditemukan',
+          "data": data,
+        };
+      }
+
+      // Core: {"batch","nama","status","sbbkas"} — batch harus berstatus aktif.
+      final nama = (data['nama'] ?? '').toString();
+      final status = (data['status'] ?? '').toString();
+      final sbbKas = (data['sbbkas'] ?? '').toString();
+      if (status.isNotEmpty && status.toLowerCase() != 'aktif') {
+        return {
+          "value": 0,
+          "message": 'Batch $batch${nama.isNotEmpty ? ' ($nama)' : ''} berstatus "$status", tidak bisa digunakan.',
+          "data": data,
+        };
+      }
       return {
-        "value": ok ? 1 : 0,
-        "message": message.isNotEmpty
-            ? message
-            : (ok ? 'Batch terverifikasi' : 'Batch tidak ditemukan'),
-        "data": decoded is Map ? decoded['data'] : null,
+        "value": 1,
+        "message": [
+          'Batch terverifikasi',
+          if (nama.isNotEmpty) 'Nama: $nama',
+          if (status.isNotEmpty) 'Status: $status',
+          if (sbbKas.isNotEmpty) 'SBB Kas: $sbbKas',
+        ].join('\n'),
+        "data": data,
       };
     } catch (e) {
       if (kDebugMode) print('ERROR VERIFIKASI BATCH: $e');
