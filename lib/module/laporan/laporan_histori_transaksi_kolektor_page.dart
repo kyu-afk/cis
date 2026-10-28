@@ -15,6 +15,7 @@ import '../../pref/pref.dart';
 import '../../repository/transaksi_repository.dart';
 import '../../repository/setup_transaksi_repository.dart';
 import '../../utils/colors.dart';
+import '../../utils/laporan_excel_exporter.dart';
 import '../../utils/widgets/app_data_grid.dart';
 import '../../utils/widgets/searchable_dropdown_petugas.dart';
 import '../data_petugas/data_petugas_notifier.dart';
@@ -241,6 +242,47 @@ class HistoriTransaksiKolektorNotifier extends ChangeNotifier {
     loadData();
   }
 
+  // ── Export Excel ──
+  bool isExporting = false;
+
+  /// Download data yang sedang tampil (sesuai filter) sebagai file Excel.
+  /// Return nama file kalau berhasil, atau lempar Exception kalau gagal.
+  Future<String> exportExcel() async {
+    final kolektor = _selectedKolektor;
+    if (kolektor == null) {
+      throw Exception('Pilih kolektor terlebih dahulu.');
+    }
+    if (_list.isEmpty) {
+      throw Exception('Tidak ada data transaksi untuk di-export.');
+    }
+    isExporting = true;
+    notifyListeners();
+    try {
+      return await LaporanExcelExporter.export(
+        harian: false,
+        namaKolektor: (kolektor.nama ?? '').isNotEmpty ? kolektor.nama! : (kolektor.userId ?? 'Kolektor'),
+        data: _list,
+        labelTransaksi: _labelTransaksi,
+        labelStatus: getNamaStatus,
+        tanggal: _tanggal,
+        statusFilter: _selectedStatus,
+      );
+    } finally {
+      isExporting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Label kolom "Transaksi" (sama dengan yang tampil di tabel).
+  String _labelTransaksi(TransaksiModel item) {
+    return _tcodeKeterangan[item.trxCode] ??
+        ((item.keterangan != null && item.keterangan!.isNotEmpty)
+            ? item.keterangan!
+            : (item.trxCode != null && item.trxCode!.isNotEmpty)
+                ? item.trxCode!
+                : '-');
+  }
+
   @override
   void dispose() {
     kolektorSearchCtrl.dispose();
@@ -299,7 +341,7 @@ class HistoriTransaksiKolektorPage extends StatelessWidget {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _buildBadges(notifier),
+            child: _buildBadges(context, notifier),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -471,14 +513,46 @@ class HistoriTransaksiKolektorPage extends StatelessWidget {
     );
   }
 
-  Widget _buildBadges(HistoriTransaksiKolektorNotifier notifier) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+  Widget _buildBadges(BuildContext context, HistoriTransaksiKolektorNotifier notifier) {
+    final canExport = notifier.selectedKolektor != null && notifier.totalData > 0 && !notifier.isExporting;
+    return Row(
       children: [
-        _badge('Total: ${notifier.totalData}', Colors.black),
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _badge('Total: ${notifier.totalData}', Colors.black),
+            ],
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: canExport ? () => _onExportExcel(context, notifier) : null,
+          icon: notifier.isExporting
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.download, size: 18),
+          label: const Text('Export Excel'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xff1D6F42),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _onExportExcel(BuildContext context, HistoriTransaksiKolektorNotifier notifier) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final fileName = await notifier.exportExcel();
+      messenger.showSnackBar(SnackBar(content: Text('File Excel berhasil dibuat: $fileName')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red,
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+      ));
+    }
   }
 
   Widget _badge(String text, Color color) {

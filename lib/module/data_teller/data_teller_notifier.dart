@@ -147,11 +147,34 @@ class DataTellerNotifier extends ChangeNotifier {
   bool isLoadingVerifikasiBatch = false;
   String _verifiedBatch = '';
   String _originalBatch = '';
+  // Hasil inquiry core — field Batch ditampilkan "batch - nama", status di bawahnya.
+  String batchNama = '';
+  String batchStatus = '';
+
+  String get _batchDisplay =>
+      batchNama.isEmpty ? _verifiedBatch : '$_verifiedBatch - $batchNama';
+
+  // Field sedang menampilkan hasil verifikasi ("batch - nama") — dikunci.
+  bool get isBatchLocked =>
+      _verifiedBatch.isNotEmpty && batchCtrl.text.trim() == _batchDisplay;
+
+  // Nilai batch asli (tanpa nama) yang dikirim ke backend.
+  String get batchValue => isBatchLocked ? _verifiedBatch : batchCtrl.text.trim();
+
   bool get isBatchVerified {
-    final batch = batchCtrl.text.trim();
-    if (batch.isEmpty) return false;
-    if (batch == _verifiedBatch) return true;
-    return drawerMode == 'edit' && batch == _originalBatch;
+    if (batchValue.isEmpty) return false;
+    if (isBatchLocked) return true;
+    return drawerMode == 'edit' && batchValue == _originalBatch;
+  }
+
+  // Tombol ✕ di field: kembalikan ke batch mentah supaya bisa diubah.
+  void resetBatchVerifikasi() {
+    final raw = batchValue;
+    _verifiedBatch = '';
+    batchNama = '';
+    batchStatus = '';
+    batchCtrl.text = raw;
+    notifyListeners();
   }
 
   // Snapshot nilai limit transaksi SAAT DIMUAT dari server, dipakai buat
@@ -587,8 +610,10 @@ class DataTellerNotifier extends ChangeNotifier {
 
   // Batch diubah setelah verifikasi -> status verifikasi gugur.
   void _onBatchChanged() {
-    if (_verifiedBatch.isNotEmpty && batchCtrl.text.trim() != _verifiedBatch) {
+    if (_verifiedBatch.isNotEmpty && batchCtrl.text.trim() != _batchDisplay) {
       _verifiedBatch = '';
+      batchNama = '';
+      batchStatus = '';
       notifyListeners();
     }
   }
@@ -725,7 +750,7 @@ class DataTellerNotifier extends ChangeNotifier {
     
     // Batch (tambah dan edit)
     if (isTambah || isEdit) {
-      final batchError = _validateBatchManual(batchCtrl.text.trim()) ??
+      final batchError = _validateBatchManual(batchValue) ??
           (isBatchVerified ? null : 'Batch belum diverifikasi. Silakan klik tombol Verifikasi terlebih dahulu');
       if (batchError != null) {
         errors['batch'] = batchError;
@@ -1180,7 +1205,7 @@ class DataTellerNotifier extends ChangeNotifier {
 
   // ==================== VERIFIKASI BATCH ====================
   Future<void> verifikasiBatch() async {
-    final batch = batchCtrl.text.trim();
+    final batch = batchValue;
     if (batch.isEmpty) {
       _showErrorDialog('Masukkan Batch terlebih dahulu');
       return;
@@ -1190,15 +1215,21 @@ class DataTellerNotifier extends ChangeNotifier {
     notifyListeners();
 
     final result = await BatchRepository.verifikasiBatch(batch: batch, bprId: bprId);
+    final data = result['data'] is Map ? result['data'] as Map : const {};
 
     isLoadingVerifikasiBatch = false;
+    batchStatus = (data['status'] ?? '').toString();
     if (result['value'] == 1) {
+      // Isi state dulu sebelum ubah text, supaya listener tidak menganggap
+      // batch diubah user.
       _verifiedBatch = batch;
+      batchNama = (data['nama'] ?? '').toString();
+      batchCtrl.text = _batchDisplay;
       _manualErrors.remove('batch');
       notifyListeners();
-      _showSuccessDialog(result['message']?.toString() ?? 'Batch terverifikasi');
     } else {
       _verifiedBatch = '';
+      batchNama = '';
       notifyListeners();
       _showErrorDialog(result['message']?.toString() ?? 'Batch tidak ditemukan');
     }
@@ -1398,6 +1429,8 @@ class DataTellerNotifier extends ChangeNotifier {
     _originalNamaSbb = '';
     _verifiedBatch = '';
     _originalBatch = '';
+    batchNama = '';
+    batchStatus = '';
     _originalMinSetorTunai   = '';
     _originalLimitSetorTunai = '';
     _originalMaxSetorTunai   = '';
@@ -1443,6 +1476,8 @@ class DataTellerNotifier extends ChangeNotifier {
     _originalNamaSbb = teller.namasbb ?? '';
     _originalBatch = (teller.batch ?? '').trim();
     _verifiedBatch = '';
+    batchNama = '';
+    batchStatus = '';
 
     selectedKantor = _listKantor.firstWhere(
       (k) => k.kdKantor == teller.kdKantor,
@@ -1638,10 +1673,10 @@ class DataTellerNotifier extends ChangeNotifier {
       };
     }
     
-    if (old.batch != batchCtrl.text.trim()) {
+    if (old.batch != batchValue) {
       changes['Batch'] = {
         'old': old.batch ?? '-',
-        'new': batchCtrl.text.trim().isEmpty ? '-' : batchCtrl.text.trim(),
+        'new': batchValue.isEmpty ? '-' : batchValue,
       };
     }
 
@@ -2230,7 +2265,7 @@ class DataTellerNotifier extends ChangeNotifier {
           tanggalExpired: tglCtrl.text.trim().length > 10
               ? tglCtrl.text.trim().substring(0, 10)
               : tglCtrl.text.trim(),
-          batch: batchCtrl.text.trim(),
+          batch: batchValue,
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id,
           hakOtor: hakOtor,
@@ -2254,7 +2289,7 @@ class DataTellerNotifier extends ChangeNotifier {
               ? tglCtrl.text.trim().substring(0, 10)
               : tglCtrl.text.trim(),
           password: isChangePassword ? passwordCtrl.text.trim() : null,
-          batch: batchCtrl.text.trim(),
+          batch: batchValue,
           bprId: bprId,
           hrmEmployeeId: selectedHrmEmployee?.id ?? selectedTeller?.hrmEmployeeId,
           hakOtor: hakOtor,
@@ -2348,7 +2383,7 @@ class DataTellerNotifier extends ChangeNotifier {
     }
 
     if (drawerMode == 'tambah') {
-      if (batchCtrl.text.trim().isEmpty) {
+      if (batchValue.isEmpty) {
         _showErrorDialog('Batch wajib diisi');
         return false;
       }

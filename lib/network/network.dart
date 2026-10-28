@@ -65,6 +65,8 @@ class NetworkURL {
   // ---------- Collector (Petugas) ----------
   static String inquiryCollector() => "$url_go3/cis/collector/inquiry";
   static String inquiryCollectorDb() => "$url_go3/cis/collector/inquiry-db";
+  // Verifikasi kode kolektor (diteruskan ke core /inquiry/collector).
+  static String inquiryKodeCollector() => "$url_go3/cis/collector/inquiry-kode";
   static String resetDeviceCollector() => "$url_go3/cis/collector/reset-device";
   static String resolveUserIdCollector() => "$url_go3/cis/collector/resolve-userid";
   static String syncRepairCollector()   => "$url_go3/cis/collector/sync-repair";

@@ -753,12 +753,18 @@ class DataTellerPage extends StatelessWidget {
                       flex: 3,
                       child: TextFormField(
                         controller: notifier.batchCtrl,
-                        readOnly: isReadOnly,
+                        readOnly: isReadOnly || notifier.isBatchLocked,
                         decoration: _inputDecoration('Batch',
-                          suffix: notifier.isBatchVerified
-                              ? const Icon(Icons.verified, size: 20, color: Colors.green)
-                              : null,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white).copyWith(
+                          suffix: notifier.isBatchLocked && !isReadOnly
+                              ? IconButton(
+                                  tooltip: 'Ganti batch',
+                                  onPressed: notifier.resetBatchVerifikasi,
+                                  icon: const Icon(Icons.close, size: 20),
+                                )
+                              : notifier.isBatchVerified
+                                  ? const Icon(Icons.verified, size: 20, color: Colors.green)
+                                  : null,
+                          fillColor: isReadOnly || notifier.isBatchLocked ? Colors.grey.shade100 : Colors.white).copyWith(
                           errorText: notifier.manualErrors['batch'],
                         ),
                         validator: null,
@@ -782,6 +788,18 @@ class DataTellerPage extends StatelessWidget {
                       ),
                     ),
                   ]),
+                  if (notifier.batchStatus.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        'Status: ${notifier.batchStatus}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: notifier.batchStatus.toLowerCase() == 'aktif' ? Colors.green.shade700 : Colors.red,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                 ],
 

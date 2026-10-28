@@ -639,17 +639,61 @@ class DataPetugasPage extends StatelessWidget {
                 // Kode Petugas (tambah dan edit)
                 if (isFormMode) ...[
                   _fieldLabel('Kode Kolektor *'),
-                  TextFormField(
-                    controller: notifier.kodePetugasCtrl,
-                    readOnly: isReadOnly,
-                    decoration: _inputDecoration(
-                      'Kode Kolektor',
-                      fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white,
-                    ).copyWith(
-                      errorText: notifier.manualErrors['kodePetugas'],
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: notifier.kodePetugasCtrl,
+                        readOnly: isReadOnly || notifier.isKodeLocked,
+                        onChanged: notifier.onKodeChanged,
+                        decoration: _inputDecoration(
+                          'Kode Kolektor',
+                          suffix: notifier.isKodeLocked && !isReadOnly
+                              ? IconButton(
+                                  tooltip: 'Ganti kode kolektor',
+                                  onPressed: notifier.resetKodeVerifikasi,
+                                  icon: const Icon(Icons.close, size: 20),
+                                )
+                              : notifier.isKodeVerified
+                                  ? const Icon(Icons.verified, size: 20, color: Colors.green)
+                                  : null,
+                          fillColor: isReadOnly || notifier.isKodeLocked ? Colors.grey.shade100 : Colors.white,
+                        ).copyWith(
+                          errorText: notifier.manualErrors['kodePetugas'],
+                        ),
+                        validator: null,
+                      ),
                     ),
-                    validator: null,
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 1,
+                      child: ElevatedButton(
+                        onPressed: isReadOnly || notifier.isLoadingVerifikasiKode ? null : notifier.verifikasiKodeKolektor,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorPrimary,
+                          foregroundColor: colortextwhite,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        child: notifier.isLoadingVerifikasiKode
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: colortextwhite))
+                            : const FittedBox(child: Text('Verifikasi', style: TextStyle(fontWeight: FontWeight.w600))),
+                      ),
+                    ),
+                  ]),
+                  if (notifier.kodeStatus.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        'Status: ${notifier.kodeStatus}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: notifier.kodeStatus.toLowerCase() == 'aktif' ? Colors.green.shade700 : Colors.red,
+                        ),
+                      ),
+                    ),
                   _fieldNote('* Kode kolektor tidak boleh mengandung spasi'),
                   const SizedBox(height: 16),
                 ],
@@ -727,13 +771,19 @@ class DataPetugasPage extends StatelessWidget {
                       flex: 3,
                       child: TextFormField(
                         controller: notifier.batchCtrl,
-                        readOnly: isReadOnly,
+                        readOnly: isReadOnly || notifier.isBatchLocked,
                         onChanged: notifier.onBatchChanged,
                         decoration: _inputDecoration('Batch',
-                          suffix: notifier.isBatchVerified
-                              ? const Icon(Icons.verified, size: 20, color: Colors.green)
-                              : null,
-                          fillColor: isReadOnly ? Colors.grey.shade100 : Colors.white).copyWith(
+                          suffix: notifier.isBatchLocked && !isReadOnly
+                              ? IconButton(
+                                  tooltip: 'Ganti batch',
+                                  onPressed: notifier.resetBatchVerifikasi,
+                                  icon: const Icon(Icons.close, size: 20),
+                                )
+                              : notifier.isBatchVerified
+                                  ? const Icon(Icons.verified, size: 20, color: Colors.green)
+                                  : null,
+                          fillColor: isReadOnly || notifier.isBatchLocked ? Colors.grey.shade100 : Colors.white).copyWith(
                           errorText: notifier.manualErrors['batch'],
                         ),
                         validator: null,
@@ -757,6 +807,18 @@ class DataPetugasPage extends StatelessWidget {
                       ),
                     ),
                   ]),
+                  if (notifier.batchStatus.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(
+                        'Status: ${notifier.batchStatus}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: notifier.batchStatus.toLowerCase() == 'aktif' ? Colors.green.shade700 : Colors.red,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                 ],
 

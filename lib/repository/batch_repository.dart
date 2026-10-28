@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../network/network.dart';
 import '../pref/pref.dart';
 
+// Verifikasi data ke core (lewat web_service_CIS): batch teller/kolektor dan
+// kode kolektor. Keduanya wajib lolos sebelum boleh diinsert.
 class BatchRepository {
   static dynamic _safeDecode(dynamic data) {
     if (data is String) return jsonDecode(data);
@@ -12,9 +14,40 @@ class BatchRepository {
   }
 
   // ==================== VERIFIKASI BATCH ====================
-  // Batch teller/kolektor wajib lolos verifikasi ini sebelum boleh diinsert.
   static Future<Map<String, dynamic>> verifikasiBatch({
     required String batch,
+    String? bprId,
+  }) =>
+      _verifikasiKeCore(
+        label: 'Batch',
+        url: NetworkURL.inquiryBatch(),
+        field: 'batch',
+        value: batch,
+        bprId: bprId,
+      );
+
+  // ==================== VERIFIKASI KODE KOLEKTOR ====================
+  static Future<Map<String, dynamic>> verifikasiKodeKolektor({
+    required String kdColl,
+    String? bprId,
+  }) =>
+      _verifikasiKeCore(
+        label: 'Kode kolektor',
+        url: NetworkURL.inquiryKodeCollector(),
+        field: 'kd_coll',
+        value: kdColl,
+        bprId: bprId,
+      );
+
+  // Webservice meneruskan ke {URL_CORE}/inquiry dan mengisi trx_code
+  // (0400 = batch, 0500 = kode kolektor), trx_type, dan tgl_trans.
+  // Response: {"code","message","data":{...,"nama"|"nama_kolektor","status"}}.
+  // Sukses hanya kalau code 000 dan status (kalau ada) "aktif".
+  static Future<Map<String, dynamic>> _verifikasiKeCore({
+    required String label,
+    required String url,
+    required String field,
+    required String value,
     String? bprId,
   }) async {
     try {
@@ -24,18 +57,18 @@ class BatchRepository {
       final body = {
         "bpr_id": bprId ?? session.bprId,
         "rrn": DateTime.now().millisecondsSinceEpoch.toString(),
-        "batch": batch,
+        field: value,
       };
 
       if (kDebugMode) {
-        print('VERIFIKASI BATCH URL: ${NetworkURL.inquiryBatch()}');
-        print('VERIFIKASI BATCH BODY: ${jsonEncode(body)}');
+        print('VERIFIKASI ${label.toUpperCase()} URL: $url');
+        print('VERIFIKASI ${label.toUpperCase()} BODY: ${jsonEncode(body)}');
       }
 
-      final response = await dio.post(NetworkURL.inquiryBatch(), data: body);
+      final response = await dio.post(url, data: body);
       final decoded = _safeDecode(response.data);
 
-      if (kDebugMode) print('VERIFIKASI BATCH RESPONSE: $decoded');
+      if (kDebugMode) print('VERIFIKASI ${label.toUpperCase()} RESPONSE: $decoded');
 
       final code = (decoded is Map ? decoded['code'] : '').toString();
       final message = (decoded is Map ? decoded['message'] : null)?.toString() ?? '';
@@ -46,35 +79,30 @@ class BatchRepository {
       if (code != '000') {
         return {
           "value": 0,
-          "message": message.isNotEmpty ? message : 'Batch tidak ditemukan',
+          "message": message.isNotEmpty ? message : '$label tidak ditemukan',
           "data": data,
         };
       }
 
-      // Core: {"batch","nama","status","sbbkas"} — batch harus berstatus aktif.
-      final nama = (data['nama'] ?? '').toString();
+      // Kode kolektor mengirim "nama_kolektor"; samakan ke "nama" untuk notifier.
+      final nama = (data['nama'] ?? data['nama_kolektor'] ?? '').toString();
+      data['nama'] = nama;
       final status = (data['status'] ?? '').toString();
-      final sbbKas = (data['sbbkas'] ?? '').toString();
       if (status.isNotEmpty && status.toLowerCase() != 'aktif') {
         return {
           "value": 0,
-          "message": 'Batch $batch${nama.isNotEmpty ? ' ($nama)' : ''} berstatus "$status", tidak bisa digunakan.',
+          "message": '$label $value${nama.isNotEmpty ? ' ($nama)' : ''} berstatus "$status", tidak bisa digunakan.',
           "data": data,
         };
       }
       return {
         "value": 1,
-        "message": [
-          'Batch terverifikasi',
-          if (nama.isNotEmpty) 'Nama: $nama',
-          if (status.isNotEmpty) 'Status: $status',
-          if (sbbKas.isNotEmpty) 'SBB Kas: $sbbKas',
-        ].join('\n'),
+        "message": '$label terverifikasi',
         "data": data,
       };
     } catch (e) {
-      if (kDebugMode) print('ERROR VERIFIKASI BATCH: $e');
-      String message = 'Gagal verifikasi batch, silakan coba lagi.';
+      if (kDebugMode) print('ERROR VERIFIKASI ${label.toUpperCase()}: $e');
+      String message = 'Gagal verifikasi ${label.toLowerCase()}, silakan coba lagi.';
       if (e is DioException && e.response?.data != null) {
         try {
           final d = _safeDecode(e.response!.data);

@@ -80,6 +80,7 @@ dependencies:
   cached_network_image: ^3.1.0
   webview_flutter: ^4.0.0
   printing: ^5.12.0
+  excel: ^4.0.6   # export laporan ke .xlsx
   
   animated_text_kit: ^4.2.1
   google_fonts: ^6.1.0

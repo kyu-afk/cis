@@ -159,7 +159,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 20),
                                 Text(
-                                  "ver. 1.2.14",
+                                  "ver. 1.0.1",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -168,7 +168,7 @@ class LoginPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "last update 10/9/26",
+                                  "last update 28/10/26",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,

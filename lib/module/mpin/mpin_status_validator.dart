@@ -21,7 +21,7 @@ class MpinStatusValidator {
   static const String _msgBelumDicetak =
       'MPIN sudah digenerate, silakan cetak di menu Cetak MPIN.';
   static const String _msgBelumGenerate =
-      'MPIN belum digenerate, silakan generate terlebih dahulu di menu Generate atau Regenerate MPIN.';
+      'MPIN belum digenerate, silakan generate terlebih dahulu di menu Generate MPIN.';
 
   /// Menu Generate MPIN: hanya untuk kolektor yang MPIN-nya masih kosong.
   static String? forGenerate(DataPetugasModel p) {

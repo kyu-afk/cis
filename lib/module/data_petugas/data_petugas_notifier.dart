@@ -218,18 +218,116 @@ class DataPetugasNotifier extends ChangeNotifier {
   bool isLoadingVerifikasiBatch = false;
   String _verifiedBatch = '';
   String _originalBatch = '';
+  // Hasil inquiry core — field Batch ditampilkan "batch - nama", status di bawahnya.
+  String batchNama = '';
+  String batchStatus = '';
+
+  String get _batchDisplay =>
+      batchNama.isEmpty ? _verifiedBatch : '$_verifiedBatch - $batchNama';
+
+  // Field sedang menampilkan hasil verifikasi ("batch - nama") — dikunci.
+  bool get isBatchLocked =>
+      _verifiedBatch.isNotEmpty && batchCtrl.text.trim() == _batchDisplay;
+
+  // Nilai batch asli (tanpa nama) yang dikirim ke backend.
+  String get batchValue => isBatchLocked ? _verifiedBatch : batchCtrl.text.trim();
+
   bool get isBatchVerified {
-    final batch = batchCtrl.text.trim();
-    if (batch.isEmpty) return false;
-    if (batch == _verifiedBatch) return true;
-    return drawerMode == 'edit' && batch == _originalBatch;
+    if (batchValue.isEmpty) return false;
+    if (isBatchLocked) return true;
+    return drawerMode == 'edit' && batchValue == _originalBatch;
   }
 
   // Batch diubah setelah verifikasi -> status verifikasi gugur.
   void onBatchChanged(String value) {
-    if (_verifiedBatch.isNotEmpty && value.trim() != _verifiedBatch) {
+    if (_verifiedBatch.isNotEmpty && value.trim() != _batchDisplay) {
       _verifiedBatch = '';
+      batchNama = '';
+      batchStatus = '';
       notifyListeners();
+    }
+  }
+
+  // Tombol ✕ di field: kembalikan ke batch mentah supaya bisa diubah.
+  void resetBatchVerifikasi() {
+    final raw = batchValue;
+    _verifiedBatch = '';
+    batchNama = '';
+    batchStatus = '';
+    batchCtrl.text = raw;
+    notifyListeners();
+  }
+
+  // Verifikasi kode kolektor (core inquiry/collector) — pola sama dengan batch:
+  // field jadi "kode - nama" & dikunci, status di bawahnya. Saat edit, kode
+  // lama yang tidak diubah dianggap valid.
+  bool isLoadingVerifikasiKode = false;
+  String _verifiedKode = '';
+  String _originalKode = '';
+  String kodeNama = '';
+  String kodeStatus = '';
+
+  String get _kodeDisplay =>
+      kodeNama.isEmpty ? _verifiedKode : '$_verifiedKode - $kodeNama';
+
+  bool get isKodeLocked =>
+      _verifiedKode.isNotEmpty && kodePetugasCtrl.text.trim() == _kodeDisplay;
+
+  // Nilai kode kolektor asli (tanpa nama) yang dikirim ke backend.
+  String get kodePetugasValue =>
+      isKodeLocked ? _verifiedKode : kodePetugasCtrl.text.trim();
+
+  bool get isKodeVerified {
+    if (kodePetugasValue.isEmpty) return false;
+    if (isKodeLocked) return true;
+    return drawerMode == 'edit' && kodePetugasValue == _originalKode;
+  }
+
+  void onKodeChanged(String value) {
+    if (_verifiedKode.isNotEmpty && value.trim() != _kodeDisplay) {
+      _verifiedKode = '';
+      kodeNama = '';
+      kodeStatus = '';
+      notifyListeners();
+    }
+  }
+
+  void resetKodeVerifikasi() {
+    final raw = kodePetugasValue;
+    _verifiedKode = '';
+    kodeNama = '';
+    kodeStatus = '';
+    kodePetugasCtrl.text = raw;
+    notifyListeners();
+  }
+
+  Future<void> verifikasiKodeKolektor() async {
+    final kode = kodePetugasValue;
+    final formatError = _validateKodePetugasManual(kode);
+    if (formatError != null) {
+      _showErrorDialog(formatError);
+      return;
+    }
+
+    isLoadingVerifikasiKode = true;
+    notifyListeners();
+
+    final result = await BatchRepository.verifikasiKodeKolektor(kdColl: kode);
+    final data = result['data'] is Map ? result['data'] as Map : const {};
+
+    isLoadingVerifikasiKode = false;
+    kodeStatus = (data['status'] ?? '').toString();
+    if (result['value'] == 1) {
+      _verifiedKode = kode;
+      kodeNama = (data['nama'] ?? '').toString();
+      kodePetugasCtrl.text = _kodeDisplay;
+      _manualErrors.remove('kodePetugas');
+      notifyListeners();
+    } else {
+      _verifiedKode = '';
+      kodeNama = '';
+      notifyListeners();
+      _showErrorDialog(result['message']?.toString() ?? 'Kode kolektor tidak ditemukan');
     }
   }
   bool isChangePassword = false;
@@ -980,11 +1078,17 @@ class DataPetugasNotifier extends ChangeNotifier {
     nipCtrl.clear();
     passwordCtrl.clear();
     kodePetugasCtrl.clear();
+    _verifiedKode = '';
+    _originalKode = '';
+    kodeNama = '';
+    kodeStatus = '';
     noSbbCtrl.clear();
     namaSbbCtrl.clear();
     batchCtrl.clear();
     _verifiedBatch = '';
     _originalBatch = '';
+    batchNama = '';
+    batchStatus = '';
     alasanCtrl.clear();
 
     limitSetorMinCtrl.text = '0';
@@ -1025,11 +1129,17 @@ class DataPetugasNotifier extends ChangeNotifier {
     noHpCtrl.text = p.noHp ?? '';
     nipCtrl.text = p.nip ?? '';
     kodePetugasCtrl.text = p.kodePetugas ?? '';
+    _originalKode = (p.kodePetugas ?? '').trim();
+    _verifiedKode = '';
+    kodeNama = '';
+    kodeStatus = '';
     noSbbCtrl.text = p.noSbb ?? '';
     namaSbbCtrl.text = p.namaSbb ?? '';
     batchCtrl.text = p.batch ?? '';
     _originalBatch = (p.batch ?? '').trim();
     _verifiedBatch = '';
+    batchNama = '';
+    batchStatus = '';
     passwordCtrl.clear();
     
     aksesSetor = p.aksesSetor;
@@ -1215,7 +1325,8 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah || isEdit) {
-      final kodeError = _validateKodePetugasManual(kodePetugasCtrl.text.trim());
+      final kodeError = _validateKodePetugasManual(kodePetugasValue) ??
+          (isKodeVerified ? null : 'Kode kolektor belum diverifikasi. Silakan klik tombol Verifikasi terlebih dahulu');
       if (kodeError != null) {
         errors['kodePetugas'] = kodeError;
         allValid = false;
@@ -1239,7 +1350,7 @@ class DataPetugasNotifier extends ChangeNotifier {
     }
     
     if (isTambah || isEdit) {
-      final batchError = _validateBatchManual(batchCtrl.text.trim()) ??
+      final batchError = _validateBatchManual(batchValue) ??
           (isBatchVerified ? null : 'Batch belum diverifikasi. Silakan klik tombol Verifikasi terlebih dahulu');
       if (batchError != null) {
         errors['batch'] = batchError;
@@ -1497,7 +1608,7 @@ class DataPetugasNotifier extends ChangeNotifier {
 
   // ==================== VERIFIKASI BATCH ====================
   Future<void> verifikasiBatch() async {
-    final batch = batchCtrl.text.trim();
+    final batch = batchValue;
     if (batch.isEmpty) {
       _showErrorDialog('Masukkan Batch terlebih dahulu');
       return;
@@ -1507,15 +1618,19 @@ class DataPetugasNotifier extends ChangeNotifier {
     notifyListeners();
 
     final result = await BatchRepository.verifikasiBatch(batch: batch);
+    final data = result['data'] is Map ? result['data'] as Map : const {};
 
     isLoadingVerifikasiBatch = false;
+    batchStatus = (data['status'] ?? '').toString();
     if (result['value'] == 1) {
       _verifiedBatch = batch;
+      batchNama = (data['nama'] ?? '').toString();
+      batchCtrl.text = _batchDisplay;
       _manualErrors.remove('batch');
       notifyListeners();
-      _showSuccessDialog(result['message']?.toString() ?? 'Batch terverifikasi');
     } else {
       _verifiedBatch = '';
+      batchNama = '';
       notifyListeners();
       _showErrorDialog(result['message']?.toString() ?? 'Batch tidak ditemukan');
     }
@@ -2148,10 +2263,10 @@ class DataPetugasNotifier extends ChangeNotifier {
     
     _addChange(changes, 'Nama', old.nama, namaCtrl.text.trim());
     _addChange(changes, 'No HP', old.noHp, noHpCtrl.text.trim());
-    _addChange(changes, 'Kode Kolektor', old.kodePetugas, kodePetugasCtrl.text.trim());
+    _addChange(changes, 'Kode Kolektor', old.kodePetugas, kodePetugasValue);
     _addChange(changes, 'No SBB', old.noSbb, noSbbCtrl.text.trim());
     _addChange(changes, 'Nama SBB', old.namaSbb, namaSbbCtrl.text.trim());
-    _addChange(changes, 'Batch', old.batch, batchCtrl.text.trim());
+    _addChange(changes, 'Batch', old.batch, batchValue);
 
     final oldKantor = getNamaKantor(old.kdKantor);
     final newKantor = selectedKantor?.namaKantor ?? '-';
@@ -2305,12 +2420,12 @@ class DataPetugasNotifier extends ChangeNotifier {
           nip: nipCtrl.text.trim(),
           kdKantor: selectedKantor?.kdKantor ?? '',
           namaKantor: selectedKantor?.namaKantor,
-          kodePetugas: kodePetugasCtrl.text.trim(),
+          kodePetugas: kodePetugasValue,
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           hrmEmployeeId: selectedHrmEmployee?.id,
           antarKantor: antarKantor,
-          batch: batchCtrl.text.trim(),
+          batch: batchValue,
           limitData: limitData,
           aksesData: aksesData,
         );
@@ -2328,13 +2443,13 @@ class DataPetugasNotifier extends ChangeNotifier {
           nip: nipCtrl.text.trim(),
           kdKantor: selectedKantor?.kdKantor ?? selectedPetugas?.kdKantor ?? '',
           namaKantor: selectedKantor?.namaKantor,
-          kodePetugas: kodePetugasCtrl.text.trim(),
+          kodePetugas: kodePetugasValue,
           noSbb: noSbbCtrl.text.trim(),
           namaSbb: namaSbbCtrl.text.trim(),
           password: isChangePassword ? passwordCtrl.text.trim() : null,
           hrmEmployeeId: selectedHrmEmployee?.id ?? selectedPetugas?.hrmEmployeeId,
           antarKantor: antarKantor,
-          batch: batchCtrl.text.trim(),
+          batch: batchValue,
           limitData: limitData,
           aksesData: aksesData,
         );
