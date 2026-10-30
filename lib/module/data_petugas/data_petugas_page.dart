@@ -171,9 +171,10 @@ class DataPetugasPage extends StatelessWidget {
 
   List<AppGridColumn> _buildColumns(DataPetugasNotifier notifier) => [
     const AppGridColumn('no', 'No', width: 70, align: Alignment.center),
-    const AppGridColumn('nama', 'Nama', width: 320),
-    const AppGridColumn('noHp', 'No HP', width: 300),
-    const AppGridColumn('kantor', 'Kantor', width: 300),
+    const AppGridColumn('nama', 'Nama', width: 280),
+    const AppGridColumn('userId', 'User ID', width: 210),
+    const AppGridColumn('noHp', 'No HP', width: 210),
+    const AppGridColumn('kantor', 'Kantor', width: 220),
     AppGridColumn('status', 'Status', width: 150, align: Alignment.center, cellBuilder: (value) => _statusBadge(value)),
     AppGridColumn(
       'aksi',
@@ -199,7 +200,7 @@ class DataPetugasPage extends StatelessWidget {
     int no = 0;
     return notifier.filteredList.map((p) => {
       'no': ++no,
-      'userId': p.userId ?? '-',
+      'userId': (p.userId ?? '').isEmpty ? '-' : p.userId,
       'nama': p.nama ?? '-',
       'noHp': p.noHp ?? '-',
       'nip': p.nip ?? '-',
