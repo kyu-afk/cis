@@ -1,5 +1,6 @@
 import 'package:cis_menu/module/dashboard/dashboard_page.dart';
 import 'package:cis_menu/module/data_petugas/data_petugas_page.dart';
+import 'package:cis_menu/module/data_koordinator/data_koordinator_page.dart';
 import 'package:cis_menu/module/data_teller/data_teller_page.dart';
 import 'package:cis_menu/module/kantor/kantor_page.dart';
 import 'package:cis_menu/module/kelola_kartu/data_kartu_page.dart';
@@ -42,6 +43,7 @@ class MenuPage extends StatelessWidget {
     14: SetupTransaksiPage(),
     20: DataTellerPage(),
     21: DataPetugasPage(),
+    22: DataKoordinatorPage(),
     30: GenerateMpinPage(),
     31: CetakMpinPage(),
     32: RegenerateMpinPage(),
@@ -83,6 +85,8 @@ class MenuPage extends StatelessWidget {
               menu: 'DATA TELLER', submenu: 'DATA TELLER'),
           _MenuItem('Data Kolektor', Icons.badge, page: 21,
               menu: 'DATA PETUGAS', submenu: 'DATA PETUGAS'),
+          _MenuItem('Data Koordinator', Icons.groups, page: 22,
+              menu: 'DATA KOORDINATOR', submenu: 'DATA KOORDINATOR'),
         ]),
         const _MenuItem('M-PIN KOLEKTOR', Icons.pin, menu: 'M-PIN', children: [
           _MenuItem('Generate M-PIN', Icons.qr_code, page: 30,

@@ -162,6 +162,18 @@ class NetworkURL {
   // (data_teller, data_petugas, buka_tutup_transaksi, laporan, dst) otomatis ikut
   // bersumber dari HRM tanpa perlu diubah satu-satu.
   static String getListKantorAccess() => hrmInquiryKantor();
+  // ── Koordinator ───────────────────────────────────────────────────────
+  static String inquiryKoordinator()        => "$url_go3/cis/koordinator/inquiry";
+  static String addKoordinator()            => "$url_go3/cis/koordinator/add";
+  static String editKoordinator()           => "$url_go3/cis/koordinator/edit";
+  static String deleteKoordinator()         => "$url_go3/cis/koordinator/delete";
+  static String resetPasswordKoordinator()  => "$url_go3/cis/koordinator/reset-password";
+  static String blokirKoordinator()         => "$url_go3/cis/koordinator/blokir";
+  static String unblokirKoordinator()       => "$url_go3/cis/koordinator/unblokir";
+  static String inquiryMemberKoordinator()  => "$url_go3/cis/koordinator/member/inquiry";
+  static String addMemberKoordinator()      => "$url_go3/cis/koordinator/member/add";
+  static String deleteMemberKoordinator()   => "$url_go3/cis/koordinator/member/delete";
+
   static String inquiryAccount() => "$url_go/inquiry_account";
   static String accountSearch() => "$url_go/account_search";
   static String nasabahPhotoBridge() => "$url_go/nasabah-photo-bridge";
