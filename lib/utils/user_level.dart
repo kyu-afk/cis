@@ -81,7 +81,7 @@ class UserLevelHelper {
 
   /// Apakah menu tertentu boleh diakses oleh super admin (lvl 2)?
   /// Super admin hanya boleh akses: Kantor, User Access, Setup, Laporan,
-  /// dan Master Data (Data Teller & Data Petugas).
+  /// dan Master Data (Data Teller, Data Petugas & Data Koordinator).
   static bool superAdminCanAccessMenu(String menu) {
     final key = menu.trim().toUpperCase();
     return key == 'KANTOR' ||
@@ -90,7 +90,8 @@ class UserLevelHelper {
         key == 'LAPORAN' ||
         key == 'MASTER DATA' ||
         key == 'DATA TELLER' ||
-        key == 'DATA PETUGAS';
+        key == 'DATA PETUGAS' ||
+        key == 'DATA KOORDINATOR';
   }
 
   /// Super admin TIDAK lagi bypass semua fasilitas —
