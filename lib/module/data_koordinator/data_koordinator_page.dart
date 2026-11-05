@@ -236,6 +236,7 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
   late final Map<String, TextEditingController> c;
   bool _saving = false, _searching = false, _searchingKode = false;
   String _verifiedKode = '';
+  bool _showPassword = false;
 
   bool get _isEdit => widget.edit != null;
 
@@ -409,7 +410,14 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
                 ),
               ]),
               _f('nama_sbb', 'Nama SBB', ro: true, req: false, hint: 'Otomatis dari pencarian'),
-              if (!_isEdit) _f('password', 'Password awal (min 6 karakter)', obscure: true),
+              if (!_isEdit)
+                _f('password', 'Password awal (min 6 karakter)',
+                    obscure: !_showPassword,
+                    suffix: IconButton(
+                      tooltip: _showPassword ? 'Sembunyikan password' : 'Lihat password',
+                      icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                      onPressed: () => setState(() => _showPassword = !_showPassword),
+                    )),
             ]),
           ),
         ),
