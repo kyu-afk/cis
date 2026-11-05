@@ -1,6 +1,8 @@
+import 'package:cis_menu/repository/batch_repository.dart';
 import 'package:cis_menu/repository/koordinator_repository.dart';
 import 'package:cis_menu/utils/colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Master Data Koordinator (per BPR) + kelola member (rekening tabungan) lewat inquiry rekening.
 class DataKoordinatorPage extends StatefulWidget {
@@ -232,9 +234,13 @@ class _KoordinatorForm extends StatefulWidget {
 class _KoordinatorFormState extends State<_KoordinatorForm> {
   final _key = GlobalKey<FormState>();
   late final Map<String, TextEditingController> c;
-  bool _saving = false, _searching = false;
+  bool _saving = false, _searching = false, _searchingKode = false;
+  String _verifiedKode = '';
 
   bool get _isEdit => widget.edit != null;
+
+  // Saat edit, kode & nama lama sudah valid (kode dikunci); saat tambah wajib lolos Cari.
+  bool get _kodeVerified => _isEdit || (_verifiedKode.isNotEmpty && c['kd_koord']!.text.trim() == _verifiedKode);
 
   @override
   void initState() {
@@ -255,6 +261,40 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
     super.dispose();
   }
 
+  void _onKodeChanged(String value) {
+    if (_verifiedKode.isNotEmpty && value.trim() != _verifiedKode) {
+      setState(() {
+        _verifiedKode = '';
+        c['nama']!.clear();
+      });
+    }
+  }
+
+  Future<void> _cariKode() async {
+    final kode = c['kd_koord']!.text.trim();
+    if (kode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kode Koordinator wajib diisi'), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _searchingKode = true);
+    final r = await BatchRepository.verifikasiKodeKoordinator(kdKoord: kode);
+    if (!mounted) return;
+    final data = r['data'] is Map ? r['data'] as Map : const {};
+    setState(() {
+      _searchingKode = false;
+      if (r['value'] == 1) {
+        _verifiedKode = kode;
+        c['nama']!.text = (data['nama'] ?? '').toString();
+      } else {
+        _verifiedKode = '';
+        c['nama']!.clear();
+      }
+    });
+    if (r['value'] != 1) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r['message'] ?? 'Kode koordinator tidak ditemukan'), backgroundColor: Colors.red));
+    }
+  }
+
   Future<void> _cariSbb() async {
     final no = c['sbb_perantara']!.text.trim();
     if (no.isEmpty) return;
@@ -272,6 +312,10 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
 
   Future<void> _save() async {
     if (!_key.currentState!.validate()) return;
+    if (!_kodeVerified || c['nama']!.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Klik Cari untuk verifikasi Kode Koordinator'), backgroundColor: Colors.red));
+      return;
+    }
     if (c['nama_sbb']!.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Klik Cari untuk verifikasi SBB Perantara'), backgroundColor: Colors.red));
       return;
@@ -299,14 +343,25 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
     }
   }
 
-  Widget _f(String key, String label, {bool ro = false, bool req = true, String? hint, bool obscure = false, TextInputType? kt}) => Padding(
+  Widget _f(String key, String label,
+          {bool ro = false,
+          bool req = true,
+          String? hint,
+          bool obscure = false,
+          TextInputType? kt,
+          ValueChanged<String>? onChanged,
+          List<TextInputFormatter>? formatters,
+          Widget? suffix}) =>
+      Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextFormField(
           controller: c[key],
           readOnly: ro,
           obscureText: obscure,
           keyboardType: kt,
-          decoration: _dec(label, hint: hint, ro: ro),
+          onChanged: onChanged,
+          inputFormatters: formatters,
+          decoration: _dec(label, hint: hint, ro: ro).copyWith(suffixIcon: suffix),
           validator: (v) => req && (v == null || v.trim().isEmpty) ? '$label wajib diisi' : null,
         ),
       );
@@ -322,8 +377,24 @@ class _KoordinatorFormState extends State<_KoordinatorForm> {
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const SizedBox(height: 4),
-              _f('kd_koord', 'Kode Koordinator', ro: _isEdit, hint: 'mis. kd01'),
-              _f('nama', 'Nama Koordinator'),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: _f('kd_koord', 'Kode Koordinator',
+                      ro: _isEdit,
+                      hint: 'mis. kd01',
+                      onChanged: _onKodeChanged,
+                      formatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                      suffix: !_isEdit && _kodeVerified ? const Icon(Icons.verified, size: 20, color: Colors.green) : null),
+                ),
+                if (!_isEdit) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 44,
+                    child: ElevatedButton(onPressed: _searchingKode ? null : _cariKode, child: _searchingKode ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Cari')),
+                  ),
+                ],
+              ]),
+              _f('nama', 'Nama Koordinator', ro: true, req: false, hint: 'Otomatis dari pencarian'),
               _f('jalan', 'Jalan', req: false),
               _f('kelurahan', 'Kelurahan', req: false),
               _f('kecamatan', 'Kecamatan', req: false),

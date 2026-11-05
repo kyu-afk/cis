@@ -39,6 +39,20 @@ class BatchRepository {
         bprId: bprId,
       );
 
+  // ==================== VERIFIKASI KODE KOORDINATOR ====================
+  // Pola sama dengan kode kolektor (endpoint & field yang sama), hanya label pesannya beda.
+  static Future<Map<String, dynamic>> verifikasiKodeKoordinator({
+    required String kdKoord,
+    String? bprId,
+  }) =>
+      _verifikasiKeCore(
+        label: 'Kode koordinator',
+        url: NetworkURL.inquiryKodeCollector(),
+        field: 'kd_coll',
+        value: kdKoord,
+        bprId: bprId,
+      );
+
   // Webservice meneruskan ke {URL_CORE}/inquiry dan mengisi trx_code
   // (0400 = batch, 0500 = kode kolektor), trx_type, dan tgl_trans.
   // Response: {"code","message","data":{...,"nama"|"nama_kolektor","status"}}.
